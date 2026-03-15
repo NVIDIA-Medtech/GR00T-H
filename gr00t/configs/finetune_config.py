@@ -31,6 +31,18 @@ class FinetuneConfig:
     If None, use the pre-registered modality config in `gr00t/configs/data/embodiment_configs.py`. 
     """
 
+    include_splits: list[str] | None = None
+    """
+    Optional allowlist of dataset splits (from meta/info.json) to include.
+    If provided, only these splits are used for training and stats.
+    """
+
+    exclude_splits: list[str] | None = None
+    """
+    Optional denylist of dataset splits (from meta/info.json) to exclude.
+    Applied after include_splits (if set). Useful for skipping fail episodes.
+    """
+
     # --- Model Tuning Flags ---
     tune_llm: bool = False
     """If True, fine-tune the language model (LLM) backbone during training."""
@@ -47,6 +59,12 @@ class FinetuneConfig:
     state_dropout_prob: float = 0.0
     """
     Dropout probability applied to state inputs for regularization during training.
+    """
+
+    state_dropout_prob_per_embodiment: dict[str, float] | None = None
+    """
+    Per-embodiment state dropout overrides. Keys are embodiment tag strings,
+    values are dropout probabilities in [0.0, 1.0].
     """
 
     # --- Data Augmentation ---
@@ -83,6 +101,23 @@ class FinetuneConfig:
               "masked_region_transforms": [{"target_mask_values": [4], "p": 1.0, "alpha_range": [0, 1]}]}
 
     If None, no extra augmentations are applied.
+    """
+
+    image_size: tuple[int, int] | None = None
+    """
+    Intermediate padded size as (height, width) for resize with padding.
+    Images are resized (preserving aspect ratio) and padded to this size.
+    Should be >= image_crop_size to allow for cropping augmentation.
+    Example: (540, 720) to pad all images to 540×720 before cropping.
+    If None, uses shortest_image_edge with aspect-preserving crops (default albumentations).
+    """
+
+    image_crop_size: tuple[int, int] | None = None
+    """
+    Final output size as (height, width) after cropping. Only used when image_size is set.
+    This is the resolution the model actually sees.
+    Example: (480, 640) means final images are 480×640.
+    If None, defaults to image_size (no cropping, padded size is final size).
     """
 
     # --- Training Configuration ---
@@ -134,3 +169,25 @@ class FinetuneConfig:
 
     num_shards_per_epoch: int = int(1e5)
     """Number of shards to use for the dataset. reduce this number if vram is limited."""
+
+    # --- Statistics Calculation Flags ---
+    calculate_norm_stats: bool = False
+    """
+    If True, only calculate normalization statistics and exit without training.
+    Uses skip_video=True for fast iteration. Statistics will be saved to
+    the norm_stats_output_path or the dataset's meta directory.
+    """
+
+    norm_stats_output_path: str | None = None
+    """
+    Path to save calculated normalization statistics. If None, saves to
+    the dataset's meta/temporal_stats.json file. Unlike stats.json (raw
+    parquet data), temporal stats cover actions after REL_XYZ_ROT6D
+    conversion and include a temporal dimension for the action chunk.
+    """
+
+    stats_num_workers: int | None = None
+    """
+    Number of parallel workers for statistics calculation. If None, uses CPU count.
+    Set to 1 to disable parallelism. Only used when calculate_norm_stats=True.
+    """

@@ -154,7 +154,7 @@ def normalize_values_meanstd(values, params):
                 * Case 2 - 2D params: Shape (T, D) - different std per step
 
     Returns:
-        Normalized values using z-score normalization
+        Normalized values using z-score normalization, clipped to [-5, 5]
             - Same shape as input values: (T, D) or (B, T, D)
             - Values are transformed as: (x - mean) / std
             - For features where std == 0, normalized value equals original value
@@ -181,7 +181,7 @@ def normalize_values_meanstd(values, params):
     # Keep original values for zero-std features
     normalized[..., ~mask] = values[..., ~mask]
 
-    return normalized
+    return np.clip(normalized, -5.0, 5.0)
 
 
 def unnormalize_values_meanstd(normalized_values, params):

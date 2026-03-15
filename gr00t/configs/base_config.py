@@ -48,6 +48,11 @@ class Config:
     def load_dict(self, data: dict):
         if "model" in data:
             self.model = self.model.__class__(**data["model"])
+            # YAML loads sequences as lists, but some model fields expect tuples.
+            for attr in ("image_crop_size", "image_target_size"):
+                val = getattr(self.model, attr, None)
+                if isinstance(val, list):
+                    setattr(self.model, attr, tuple(val))
         if "data" in data:
             self.data = DataConfig(**data["data"])
             # Ensure nested datasets are converted to dataclass instances

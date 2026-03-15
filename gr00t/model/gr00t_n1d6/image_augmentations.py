@@ -527,6 +527,74 @@ class LetterBoxTransform:
         return padded_img
 
 
+class ResizeWithPadding:
+    """Resize image to target size while preserving aspect ratio, padding with black bars.
+
+    This is different from LetterBoxTransform which pads to square. This transform
+    resizes and pads to an exact target size (height, width).
+
+    Pipeline:
+    1. Resize image so it fits within target size (preserving aspect ratio)
+    2. Pad with black bars to reach exact target dimensions
+    """
+
+    def __init__(self, target_size: tuple[int, int]):
+        """
+        Args:
+            target_size: Target (height, width) for the output image
+        """
+        self.target_h, self.target_w = target_size
+
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        """
+        Resize and pad image to target size.
+
+        Args:
+            img: Image tensor of shape (..., C, H, W)
+
+        Returns:
+            Image tensor of shape (..., C, target_h, target_w)
+        """
+        *leading_dims, c, h, w = img.shape
+
+        # Calculate scale to fit within target while preserving aspect ratio
+        scale = min(self.target_h / h, self.target_w / w)
+        new_h = int(h * scale)
+        new_w = int(w * scale)
+
+        # Handle leading dimensions by reshaping
+        if leading_dims:
+            batch_size = torch.tensor(leading_dims).prod().item()
+            img_reshaped = img.reshape(batch_size, c, h, w)
+        else:
+            img_reshaped = img.unsqueeze(0)
+
+        # Resize preserving aspect ratio
+        resized = transforms.functional.resize(img_reshaped, [new_h, new_w], antialias=True)
+
+        # Calculate padding needed to reach target size
+        pad_h = self.target_h - new_h
+        pad_w = self.target_w - new_w
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left
+
+        # Apply padding
+        padded = transforms.functional.pad(
+            resized, padding=[pad_left, pad_top, pad_right, pad_bottom], fill=0
+        )
+
+        # Reshape back
+        if leading_dims:
+            output_shape = leading_dims + [c, self.target_h, self.target_w]
+            padded = padded.reshape(output_shape)
+        else:
+            padded = padded.squeeze(0)
+
+        return padded
+
+
 def build_image_transformations(
     image_target_size, image_crop_size, random_rotation_angle, color_jitter_params
 ):
@@ -544,11 +612,8 @@ def build_image_transformations(
     """
     transform_list = [
         transforms.ToImage(),
-        LetterBoxTransform(),
-        # transforms.ToDtype(torch.get_default_dtype(), scale=True),
-        transforms.Resize(size=image_target_size),
+        ResizeWithPadding(target_size=image_target_size),
         transforms.RandomCrop(size=image_crop_size),
-        transforms.Resize(size=image_target_size),
     ]
     if random_rotation_angle is not None and random_rotation_angle != 0:
         transform_list.append(
@@ -559,12 +624,9 @@ def build_image_transformations(
     train_image_transform = transforms.Compose(transform_list)
     eval_image_transform = transforms.Compose(
         [
-            transforms.ToImage(),
-            # transforms.ToDtype(torch.get_default_dtype(), scale=True),
-            LetterBoxTransform(),
-            transforms.Resize(size=image_target_size),
+            transforms.ToImage(),  # Convert numpy/PIL to tensor
+            ResizeWithPadding(target_size=image_target_size),
             transforms.CenterCrop(size=image_crop_size),
-            transforms.Resize(size=image_target_size),
         ]
     )
     return train_image_transform, eval_image_transform

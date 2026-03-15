@@ -1,0 +1,94 @@
+{
+  "state": {
+    "psm1_pose": {
+      "start": 0,
+      "end": 7,
+      "original_keys": [
+        "observation.cartesian_state.psm1.pose.position.x",
+        "observation.cartesian_state.psm1.pose.position.y",
+        "observation.cartesian_state.psm1.pose.position.z",
+        "observation.cartesian_state.psm1.pose.orientation.x",
+        "observation.cartesian_state.psm1.pose.orientation.y",
+        "observation.cartesian_state.psm1.pose.orientation.z",
+        "observation.cartesian_state.psm1.pose.orientation.w"
+      ]
+    },
+    "psm1_gripper": {
+      "start": 0,
+      "end": 1,
+      "original_key": "observation.state.psm1.gripper"
+    },
+    "psm2_pose": {
+      "start": 0,
+      "end": 7,
+      "original_keys": [
+        "observation.cartesian_state.psm2.pose.position.x",
+        "observation.cartesian_state.psm2.pose.position.y",
+        "observation.cartesian_state.psm2.pose.position.z",
+        "observation.cartesian_state.psm2.pose.orientation.x",
+        "observation.cartesian_state.psm2.pose.orientation.y",
+        "observation.cartesian_state.psm2.pose.orientation.z",
+        "observation.cartesian_state.psm2.pose.orientation.w"
+      ]
+    },
+    "psm2_gripper": {
+      "start": 0,
+      "end": 1,
+      "original_key": "observation.state.psm2.gripper"
+    }
+  },
+  "action": {
+    "psm1_pose": {
+      "start": 0,
+      "end": 7,
+      "original_keys": [
+        "observation.cartesian_state.psm1.pose.position.x",
+        "observation.cartesian_state.psm1.pose.position.y",
+        "observation.cartesian_state.psm1.pose.position.z",
+        "observation.cartesian_state.psm1.pose.orientation.x",
+        "observation.cartesian_state.psm1.pose.orientation.y",
+        "observation.cartesian_state.psm1.pose.orientation.z",
+        "observation.cartesian_state.psm1.pose.orientation.w"
+      ]
+    },
+    "psm1_gripper": {
+      "start": 0,
+      "end": 1,
+      "original_key": "action.psm1.gripper"
+    },
+    "psm2_pose": {
+      "start": 0,
+      "end": 7,
+      "original_keys": [
+        "observation.cartesian_state.psm2.pose.position.x",
+        "observation.cartesian_state.psm2.pose.position.y",
+        "observation.cartesian_state.psm2.pose.position.z",
+        "observation.cartesian_state.psm2.pose.orientation.x",
+        "observation.cartesian_state.psm2.pose.orientation.y",
+        "observation.cartesian_state.psm2.pose.orientation.z",
+        "observation.cartesian_state.psm2.pose.orientation.w"
+      ]
+    },
+    "psm2_gripper": {
+      "start": 0,
+      "end": 1,
+      "original_key": "action.psm2.gripper"
+    }
+  },
+  "video": {
+    "endoscope_left": {
+      "original_key": "observation.images.endoscope_left"
+    },
+    "endoscope_right": {
+      "original_key": "observation.images.endoscope_right"
+    },
+    "camera_side_view": {
+      "original_key": "observation.images.camera_side_view"
+    }
+  },
+  "annotation": {
+    "task": {
+      "original_key": "task_index"
+    }
+  }
+}

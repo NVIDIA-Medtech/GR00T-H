@@ -1,27 +1,31 @@
 <div align="center">
 
-  <img src="media/header_compress.png" width="800" alt="NVIDIA Isaac GR00T N1.6 Header">
+  <img src="media/gr00t-h-header.png" width="800" alt="NVIDIA GR00T-H Header">
 
   <!-- --- -->
   
   <p style="font-size: 1.2em;">
-    <a href="https://developer.nvidia.com/isaac/gr00t"><strong>Website</strong></a> | 
-    <a href="https://huggingface.co/nvidia/GR00T-N1.6-3B"><strong>Model</strong></a> |
-    <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim"><strong>Dataset</strong></a> |
-    <a href="https://arxiv.org/abs/2503.14734"><strong>Paper</strong></a> |
-    <a href="https://research.nvidia.com/labs/gear/gr00t-n1_6/"><strong>Research Blog</strong></a>
+    <a href="https://huggingface.co/nvidia/GR00T-H"><strong>Model</strong></a> |
+    <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment"><strong>Open-H Dataset</strong></a> |
   </p>
 </div>
 
+> GR00T-H is a variant of GR00T N1.6 post-trained on the [Open-H dataset](open_h/README.md) for healthcare robotics autonomy. This repository is intended for developers working with the Open-H dataset or building on GR00T for healthcare applications. For general robotics use cases, the upstream [Isaac-GR00T](https://github.com/NVIDIA/Isaac-GR00T) project is a better starting point.
+
+## GR00T-H
+
+The primary differences from upstream Isaac-GR00T live in [`open_h/`](open_h/README.md):
+- Per-embodiment modality configs converting 16 healthcare robot datasets to a common action representation
+- Multi-embodiment training config and dataset preparation tooling
+- Extensions to the data pipeline (clutch-aware filtering, motion scaling, step filtering)
+
+*The rest of this README documents the base GR00T N1.6 model, which GR00T-H builds on.*
+
+---
+
+---
+
 ## NVIDIA Isaac GR00T
-
-<div align="center">
-  <img src="media/stacked_demo.gif" width="800" alt="GR00T Demo">
-</div>
-
-> We just released GR00T N1.6, an updated version of GR00T N1 with improved performance and new features. Check out the [release blog post](https://research.nvidia.com/labs/gear/gr00t-n1_6/) for more details.
-
-> To use the older version, N1.5, please checkout the [n1.5-release](https://github.com/NVIDIA/Isaac-GR00T/tree/n1.5-release) branch.
 
 NVIDIA Isaac GR00T N1.6 is an open vision-language-action (VLA) model for generalized humanoid robot skills. This cross-embodiment model takes multimodal input, including language and images, to perform manipulation tasks in diverse environments.
 
@@ -106,6 +110,12 @@ After installing uv, create the environment and install GR00T:
 ```sh
 uv sync --python 3.10
 uv pip install -e .
+```
+
+If `flash-attn` was not built during `uv sync`, install it manually from inside a GPU-enabled environment or container before running GPU training or inference:
+
+```sh
+uv pip install flash-attn==2.7.4.post1 --no-build-isolation
 ```
 
 > Note: CUDA 12.4 is recommended and officially tested. However, CUDA 11.8 has also been verified to work.

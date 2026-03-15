@@ -40,8 +40,29 @@ EMBODIMENT_TAG_TO_PROJECTOR_INDEX = {
     "libero_panda": 2,
     "oxe_google": 0,
     "oxe_widowx": 1,
-    "oxe_droid": 16,
+    "oxe_droid": 29,
     "new_embodiment": 10,
+    ##### Open-H embodiment ids #####
+    "jhu_imerse_dvrk": 3,
+    "cmr_versius": 4,
+    "ucb_dvrk": 5,
+    "sanoscience_sim": 6,
+    "tum_sonata_franka": 7,
+    "hamlyn_dvrk_15hz": 9,
+    "hamlyn_dvrk_30hz": 11,
+    "ustc_torin_tuodao": 12,
+    "ucsd_dvrk": 14,
+    "jhu_imerse_dvrk_mono": 15,
+    "rob_surgical_bitrack": 16,
+    "stanford_dvrk_real": 17,
+    "obuda_dvrk": 18,
+    "polyu_sim": 19,
+    "moon_maestro": 21,
+    "jhu_lscr_dvrk_miracle": 22,
+    "jhu_lscr_dvrk_smarts": 23,
+    "jhu_imerse_star_il": 27,
+    "tud_tundra_ur5e": 25,
+    "turin_mitic_ex_vivo": 26,
 }
 
 
@@ -235,12 +256,21 @@ class Gr00tN1d6Processor(BaseProcessor):
         embodiment_tag: EmbodimentTag,
         state: dict[str, np.ndarray] | None = None,
     ):
-        """Undo action normalization and convert relative actions to absolute."""
-        # Split concatenated action into joint groups
+        """Undo action normalization and convert relative actions to absolute.
+
+        Args:
+            action: Normalized action array from model
+            embodiment_tag: Embodiment tag for modality config lookup
+            state: Optional current state for relative-to-absolute conversion
+        """
+        # Split concatenated action into joint groups (excluding pass_through_keys)
         out_dict = {}
         start_idx = 0
-        joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
-        action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
+        action_config = self.modality_configs[embodiment_tag.value]["action"]
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        joint_groups = [k for k in action_config.modality_keys if k not in pass_through_keys]
+
+        action_horizon = len(action_config.delta_indices)
         for key in joint_groups:
             joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
                 key
@@ -306,8 +336,10 @@ class Gr00tN1d6Processor(BaseProcessor):
         )
 
         if normalized_actions:
-            # Concatenate actions
-            action_keys = self.modality_configs[embodiment_tag.value]["action"].modality_keys
+            # Concatenate actions (excluding pass_through_keys which were removed by StateActionProcessor)
+            action_config = self.modality_configs[embodiment_tag.value]["action"]
+            pass_through_keys = set(action_config.pass_through_keys or [])
+            action_keys = [k for k in action_config.modality_keys if k not in pass_through_keys]
             normalized_actions = torch.cat(
                 [torch.from_numpy(normalized_actions[key]) for key in action_keys], dim=-1
             )  # (t, d)
@@ -344,20 +376,28 @@ class Gr00tN1d6Processor(BaseProcessor):
             normalized_actions = None
             action_mask = None
 
-        # Concatenate states
+        # Concatenate states (excluding pass-through keys)
+        state_config = self.modality_configs[embodiment_tag.value].get("state")
+        pass_through_keys = getattr(state_config, "pass_through_keys", None) or []
+        pass_through_key_set = set(pass_through_keys)
         state_keys = self.modality_configs[embodiment_tag.value]["state"].modality_keys
-        normalized_states = torch.cat(
+        if pass_through_key_set:
+            state_keys = [key for key in state_keys if key not in pass_through_key_set]
+        normalized_states_concat = torch.cat(
             [torch.from_numpy(normalized_states[key]) for key in state_keys], dim=-1
         )
-        normalized_states = torch.cat(
+        normalized_states_concat = torch.cat(
             [
-                normalized_states,
+                normalized_states_concat,
                 torch.zeros(
-                    normalized_states.shape[0], self.max_state_dim - normalized_states.shape[1]
+                    normalized_states_concat.shape[0],
+                    self.max_state_dim - normalized_states_concat.shape[1],
                 ),
             ],
             dim=-1,
         )
+        # Rename for consistency with rest of code
+        normalized_states = normalized_states_concat
 
         # Crop and resize images.
         if self.training:
@@ -529,12 +569,19 @@ class Gr00tN1d6Processor(BaseProcessor):
                 "color_jitter_params",
                 "use_relative_action",
                 "extra_augmentation_config",
+                "use_percentiles",
+                "image_crop_size",
+                "image_target_size",
+                "use_albumentations",
+                "shortest_image_edge",
+                "crop_fraction",
+                "max_action_horizon",
             ]
             for key in override_keys:
                 if key in kwargs:
                     override = kwargs.pop(key)
-                    if override is not None:
-                        processor_kwargs[key] = override
+                    # Allow None as a valid override value for image config
+                    processor_kwargs[key] = override
         return cls(**processor_kwargs, transformers_loading_kwargs=transformers_loading_kwargs)
 
 
