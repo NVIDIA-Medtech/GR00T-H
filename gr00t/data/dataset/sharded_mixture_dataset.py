@@ -1,4 +1,5 @@
 from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 import time
 
 import numpy as np
@@ -6,101 +7,130 @@ import torch.distributed as dist
 from torch.utils.data import IterableDataset, get_worker_info
 
 from gr00t.data.interfaces import BaseProcessor, ShardedDataset
+from gr00t.data.percentile_merge import merge_piecewise_linear_quantiles
+
+
+def _validate_required_stats(
+    stats: dict[str, list[float] | np.ndarray],
+    context: str,
+) -> None:
+    """Validate that required statistic keys are present for percentile merging.
+
+    Args:
+        stats: Statistic dictionary for a single joint group.
+        context: Context string for error reporting.
+
+    Raises:
+        ValueError: If any required statistic keys are missing.
+    """
+    required_keys = ("min", "max", "mean", "std", "q01", "q02", "q98", "q99")
+    missing = [key for key in required_keys if key not in stats]
+    if missing:
+        raise ValueError(
+            f"Missing required statistics for percentile merge. Missing {missing} in {context}."
+        )
 
 
 def merge_statistics(
     per_dataset_stats: list[dict[str, dict[str, list[float] | np.ndarray]]],
     dataset_sampling_weights: list[float] | np.ndarray,
     is_relative_stats: bool = False,
-) -> dict[str, dict[str, list[float]]]:
-    """
-    Compute overall statistics from per-dataset statistics using weighted averaging.
+) -> dict[str, dict[str, list[float] | np.ndarray]]:
+    """Merge per-dataset statistics for a single modality across joint groups.
 
-    This function combines statistics from multiple datasets according to their sampling
-    weights, computing weighted means and variances while preserving min/max/quantile
-    information across all datasets.
-
-    The weighted variance computation uses the formula:
-    Var_combined = Σ(w_i * (σ_i² + μ_i²)) - (Σ(w_i * μ_i))²
+    This function combines statistics from multiple datasets according to their
+    sampling weights. Means and variances are merged via weighted averaging, while
+    percentiles are merged via piecewise-linear CDF interpolation.
 
     Args:
-        per_dataset_stats: List of per-dataset statistics dictionaries.
-            Each element has structure: {modality: {joint_group: {stat_type: values}}}
-            Example: {"state": {"gripper": {"mean": [0.1, 0.2], "std": [0.5, 0.3]}}}
-        dataset_sampling_weights: Weights for combining dataset statistics.
-            Should sum to 1.0 or will be normalized.
-        is_relative_stats: Whether the statistics are relative (affects merging logic).
+        per_dataset_stats: List of per-dataset statistic dicts for a single modality.
+            Structure: {joint_group: {stat_type: values}}.
+        dataset_sampling_weights: Weights for combining dataset statistics. Will be
+            normalized to sum to 1.0.
+        is_relative_stats: Whether stats are for relative actions (used for context
+            in error messages).
 
     Returns:
-        Combined statistics dictionary with same structure as input, containing
-        weighted averages for mean/std and global min/max/quantiles across datasets.
+        Dictionary mapping joint_group to merged statistics for that group.
     """
-    # Normalize sampling weights to sum to 1
-    dataset_sampling_weights = np.array(dataset_sampling_weights)
-    normalized_weights = dataset_sampling_weights / dataset_sampling_weights.sum()
+    if not per_dataset_stats:
+        raise ValueError("Cannot merge statistics: per_dataset_stats is empty.")
 
-    # Initialize overall statistics dict
-    overall_stats: dict[str, dict[str, list[float]]] = {}
+    normalized_weights = np.array(dataset_sampling_weights, dtype=np.float64)
+    weight_sum = normalized_weights.sum()
+    if weight_sum <= 0:
+        raise ValueError("Dataset sampling weights must sum to a positive value.")
+    normalized_weights = normalized_weights / weight_sum
 
-    # Process each modality (e.g., "state", "action")
-    for modality in per_dataset_stats[0]:
-        # Get dimensionality from first dataset (assumed consistent)
-        dim = (
-            [len(per_dataset_stats[0][modality]["mean"])]
-            if not is_relative_stats
-            else np.array(per_dataset_stats[0][modality]["mean"]).shape
-        )
+    overall_stats: dict[str, dict[str, list[float] | np.ndarray]] = {}
+    joint_groups = per_dataset_stats[0].keys()
+    stats_type = "relative_action" if is_relative_stats else "modality"
 
-        # Initialize accumulators for weighted mean and variance computation
-        weighted_means = np.zeros(dim)
-        weighted_squares = np.zeros(dim)
-
-        # Collect min/max/quantiles from all datasets for global computation
+    for joint_group in joint_groups:
+        weighted_means = None
+        weighted_squares = None
         min_list = []
         max_list = []
-        q01_list = []
-        q99_list = []
+        quantile_payloads = []
 
-        # Accumulate weighted statistics across datasets
         for dataset_idx, dataset_stats in enumerate(per_dataset_stats):
-            w_i = normalized_weights[dataset_idx]
-            stats = dataset_stats[modality]
-            means = np.array(stats["mean"])
-            stds = np.array(stats["std"])
+            if joint_group not in dataset_stats:
+                raise ValueError(
+                    "Missing joint group statistics for merge. "
+                    f"Joint group '{joint_group}' not found in dataset index {dataset_idx}."
+                )
+            stats = dataset_stats[joint_group]
+            context = f"{stats_type} '{joint_group}', dataset index {dataset_idx}"
+            _validate_required_stats(stats, context=context)
+            means = np.array(stats["mean"], dtype=np.float64)
+            stds = np.array(stats["std"], dtype=np.float64)
 
-            # Update weighted sums for mean and variance calculation
-            weighted_means += w_i * means
-            weighted_squares += w_i * (stds**2 + means**2)
+            if weighted_means is None:
+                weighted_means = np.zeros_like(means, dtype=np.float64)
+                weighted_squares = np.zeros_like(means, dtype=np.float64)
 
-            # Collect extremes and quantiles for global computation
-            min_list.append(stats["min"])
-            max_list.append(stats["max"])
-            q01_list.append(stats["q01"])
-            q99_list.append(stats["q99"])
+            weight = normalized_weights[dataset_idx]
+            weighted_means += weight * means
+            weighted_squares += weight * (stds**2 + means**2)
 
-        # Compute final combined statistics
-        overall_mean = weighted_means.tolist()
+            min_list.append(np.array(stats["min"], dtype=np.float64))
+            max_list.append(np.array(stats["max"], dtype=np.float64))
+            quantile_payloads.append(
+                {
+                    "min": np.array(stats["min"], dtype=np.float64),
+                    "q01": np.array(stats["q01"], dtype=np.float64),
+                    "q02": np.array(stats["q02"], dtype=np.float64),
+                    "q98": np.array(stats["q98"], dtype=np.float64),
+                    "q99": np.array(stats["q99"], dtype=np.float64),
+                    "max": np.array(stats["max"], dtype=np.float64),
+                }
+            )
+
+        if weighted_means is None or weighted_squares is None:
+            raise ValueError(
+                f"Cannot merge statistics: no valid datasets for joint group '{joint_group}'."
+            )
+
+        overall_mean = weighted_means
         overall_variance = weighted_squares - weighted_means**2
-        overall_std = np.sqrt(overall_variance).tolist()
+        overall_std = np.sqrt(overall_variance)
 
-        # Global min/max across all datasets
-        overall_min = np.min(np.array(min_list), axis=0).tolist()
-        overall_max = np.max(np.array(max_list), axis=0).tolist()
+        overall_min = np.min(np.stack(min_list, axis=0), axis=0)
+        overall_max = np.max(np.stack(max_list, axis=0), axis=0)
+        merged_quantiles = merge_piecewise_linear_quantiles(
+            per_dataset_quantiles=quantile_payloads,
+            weights=normalized_weights,
+        )
 
-        # Global quantiles (conservative bounds across datasets)
-        q01_array = np.array(q01_list)
-        q99_array = np.array(q99_list)
-        weighted_q01 = np.min(q01_array, axis=0).tolist()
-        weighted_q99 = np.max(q99_array, axis=0).tolist()
-
-        # Store combined statistics for this modality
-        overall_stats[modality] = {
-            "min": overall_min,
-            "max": overall_max,
-            "mean": overall_mean,
-            "std": overall_std,
-            "q01": weighted_q01,
-            "q99": weighted_q99,
+        overall_stats[joint_group] = {
+            "min": overall_min.tolist(),
+            "max": overall_max.tolist(),
+            "mean": overall_mean.tolist(),
+            "std": overall_std.tolist(),
+            "q01": merged_quantiles["q01"].tolist(),
+            "q02": merged_quantiles["q02"].tolist(),
+            "q98": merged_quantiles["q98"].tolist(),
+            "q99": merged_quantiles["q99"].tolist(),
         }
 
     return overall_stats
@@ -135,6 +165,7 @@ class ShardedMixtureDataset(IterableDataset):
         seed: Random seed for reproducible sampling
         training: Whether in training mode (affects sampling strategy)
         num_shards_per_epoch: Number of shards to sample per epoch during training
+        override_pretraining_statistics: Whether to override pretrained model statistics
 
     Example:
         >>> mixture = ShardedMixtureDataset(
@@ -158,7 +189,17 @@ class ShardedMixtureDataset(IterableDataset):
         num_shards_per_epoch: int = int(1e5),
         override_pretraining_statistics: bool = False,
     ):
-        """Initialize mixture dataset with datasets, weights, and configuration."""
+        """Initialize mixture dataset with datasets, weights, and configuration.
+
+        Args:
+            datasets: List of ShardedDataset instances to combine
+            weights: Mixing weights for each dataset (will be normalized)
+            processor: Data processor to apply to all datasets
+            seed: Random seed for reproducible sampling
+            training: Whether in training mode (affects sampling strategy)
+            num_shards_per_epoch: Number of shards to sample per epoch during training
+            override_pretraining_statistics: Whether to override pretrained model statistics
+        """
         self.datasets = datasets
         self.weights = weights
         self.seed = seed
@@ -171,7 +212,7 @@ class ShardedMixtureDataset(IterableDataset):
         # Generate initial shard sampling schedule
         self.shard_sampling_schedule = self.generate_shard_sampling_schedule()
 
-        # Merge statistics across datasets and configure processor
+        # Merge statistics and configure processor
         self.merge_statistics()
 
         # Initialize distributed training parameters
@@ -200,6 +241,7 @@ class ShardedMixtureDataset(IterableDataset):
         # Group datasets and weights by embodiment
         all_stats_by_emb: dict[str, list] = {}
         weights_by_emb: dict[str, list[float]] = {}
+        datasets_missing_percentiles: list[str] = []
         for ds, w in zip(self.datasets, self.weights):
             emb = getattr(ds, "embodiment_tag", None)
             if emb is None:
@@ -208,15 +250,39 @@ class ShardedMixtureDataset(IterableDataset):
             if emb not in all_stats_by_emb:
                 all_stats_by_emb[emb] = []
                 weights_by_emb[emb] = []
-            stats = ds.get_dataset_statistics()  # type: ignore
-            all_stats_by_emb[emb].append(stats)
+            if not hasattr(ds, "get_percentile_statistics"):
+                dataset_name = getattr(ds, "repo_id", Path(ds.dataset_path).name)
+                raise ValueError(
+                    "Per-embodiment percentile merge requires datasets that expose "
+                    f"percentile statistics. Dataset '{dataset_name}' does not support it."
+                )
+            percentile_stats = ds.get_percentile_statistics(None)  # type: ignore
+            if percentile_stats is None:
+                dataset_name = getattr(ds, "repo_id", Path(ds.dataset_path).name)
+                datasets_missing_percentiles.append(dataset_name)
+                continue
+            all_stats_by_emb[emb].append(percentile_stats)
             weights_by_emb[emb].append(w)
+
+        if datasets_missing_percentiles:
+            raise ValueError(
+                "Per-embodiment percentile merge requires per-dataset percentile stats "
+                "for every dataset. Missing stats for: "
+                f"{sorted(datasets_missing_percentiles)}"
+            )
 
         # Merge statistics within each embodiment group
         stats_by_emb = {}
         for emb, stats in all_stats_by_emb.items():
             stats_by_emb[emb] = {}
             for modality in ["state", "action", "relative_action"]:
+                if modality == "relative_action":
+                    relative_action_presence = [modality in s for s in stats]
+                    if any(relative_action_presence) and not all(relative_action_presence):
+                        raise ValueError(
+                            "Relative-action statistics must be present for all datasets or none "
+                            f"within embodiment '{emb}'. Found presence flags: {relative_action_presence}"
+                        )
                 if modality in stats[0]:
                     modality_stats = [s[modality] for s in stats]
                     stats_by_emb[emb][modality] = merge_statistics(
@@ -351,6 +417,12 @@ class ShardedMixtureDataset(IterableDataset):
         # Initialize worker-specific shard schedule
         self.worker_shard_sampling_schedule = self.filter_shard_sample_schedule()
         self.curr_shard_index = -1
+
+        # Seed processor RNG streams for this (epoch, rank, worker) context
+        # before scheduling the first background cache job.
+        if self.processor is not None and hasattr(self.processor, "seed_vqa_rng"):
+            self.processor.seed_vqa_rng(self.seed, self.epoch, self.rank, self.worker_id or 0)
+
         self.cache_next_shard()
         rng = np.random.default_rng(self.seed + self.epoch)
 
@@ -395,6 +467,10 @@ class ShardedMixtureDataset(IterableDataset):
             self.shard_sampling_schedule = self.generate_shard_sampling_schedule()
             self.worker_shard_sampling_schedule = self.filter_shard_sample_schedule()
             self.curr_shard_index = -1
+
+            # Reseed processor RNG streams for the new epoch context.
+            if self.processor is not None and hasattr(self.processor, "seed_vqa_rng"):
+                self.processor.seed_vqa_rng(self.seed, self.epoch, self.rank, self.worker_id or 0)
 
         print(f"Rank {self.rank}, Worker {self.worker_id}: Caching shard...")
         next_dataset_idx, next_shard_idx = self.worker_shard_sampling_schedule[

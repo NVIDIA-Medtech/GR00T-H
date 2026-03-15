@@ -1,0 +1,20 @@
+{
+  "video": {
+    "endoscope": {"original_key": "observation.images.endoscope"}
+  },
+  "state": {
+    "left_pose": {"start": 0, "end": 6, "original_key": "observation.end_effector_state"},
+    "right_pose": {"start": 6, "end": 12, "original_key": "observation.end_effector_state"},
+    "lap_pose": {"start": 12, "end": 18, "original_key": "observation.end_effector_state"},
+    "aux_pose": {"start": 18, "end": 24, "original_key": "observation.end_effector_state"}
+  },
+  "action": {
+    "left_pose": {"start": 0, "end": 6},
+    "right_pose": {"start": 6, "end": 12},
+    "lap_pose": {"start": 12, "end": 18},
+    "aux_pose": {"start": 18, "end": 24}
+  },
+  "annotation": {
+    "instruction": {"original_key": "instruction.text_with_tool", "is_text": true}
+  }
+}

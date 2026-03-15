@@ -1,0 +1,91 @@
+{
+    "video": {
+        "camera_color": {
+            "original_key": "observation.images.color"
+        }
+    },
+    "state": {
+        "inst_0_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_0_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_1_pose": {
+            "start": 8,
+            "end": 15,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_1_gripper": {
+            "start": 15,
+            "end": 16,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_2_pose": {
+            "start": 16,
+            "end": 23,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_2_gripper": {
+            "start": 23,
+            "end": 24,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_3_pose": {
+            "start": 24,
+            "end": 31,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_3_gripper": {
+            "start": 31,
+            "end": 32,
+            "original_key": "action.cartesian_absolute"
+        }
+    },
+    "action": {
+        "inst_0_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_0_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_1_pose": {
+            "start": 8,
+            "end": 15,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_1_gripper": {
+            "start": 15,
+            "end": 16,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_2_pose": {
+            "start": 16,
+            "end": 23,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_2_gripper": {
+            "start": 23,
+            "end": 24,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_3_pose": {
+            "start": 24,
+            "end": 31,
+            "original_key": "action.cartesian_absolute"
+        },
+        "inst_3_gripper": {
+            "start": 31,
+            "end": 32,
+            "original_key": "action.cartesian_absolute"
+        }
+    }
+}

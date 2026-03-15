@@ -84,7 +84,9 @@ def warn_configs(config: Config):
             assert (
                 config.model.shortest_image_edge is None and config.model.crop_fraction is None
             ), (
-                "Do not set shortest_image_edge and crop_fraction together with image_crop_size and image_target_size"
+                "Do not set shortest_image_edge and crop_fraction together with image_crop_size and image_target_size. "
+                "If you are using a YAML config with only image_target_size/image_crop_size, set "
+                "shortest_image_edge: null and crop_fraction: null explicitly."
             )
 
     if (
@@ -121,8 +123,10 @@ def run(config: Config):
     # Validate config
     config.validate()
 
-    # Create output directory
-    if config.training.experiment_name is None:
+    if os.environ.get("WANDB_RUN_ID") is not None:
+        experiment_name = os.environ.get("WANDB_RUN_ID")
+        output_dir = Path(config.training.output_dir) / experiment_name
+    elif config.training.experiment_name is None:
         output_dir = Path(config.training.output_dir)
         experiment_name = output_dir.name
     else:
@@ -162,8 +166,10 @@ def run(config: Config):
         wandb.init(
             project=config.training.wandb_project,
             name=experiment_name,
+            id=experiment_name,
             config=config_dict,
             tags=[config.data.mode],
+            resume="allow",
         )
 
     # Setup model training pipeline.

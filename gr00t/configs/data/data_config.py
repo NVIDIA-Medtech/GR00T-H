@@ -31,6 +31,11 @@ class SingleDatasetConfig:
     # If not provided, falls back to dataset_paths for evaluation
     val_dataset_path: Optional[str] = None
 
+    # Optional split-based episode filtering (from meta/info.json splits)
+    # If include_splits is set, only those splits are used. Then exclude_splits is applied.
+    exclude_splits: List[str] | None = None
+    include_splits: List[str] | None = None
+
 
 @dataclass
 class DataConfig:
