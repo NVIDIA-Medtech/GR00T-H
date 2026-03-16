@@ -1,0 +1,317 @@
+# GR00T-H Pre-Training Configuration
+#
+# This is the training recipe used to produce the released GR00T-H checkpoint.
+# It trains on 14 surgical embodiments with per-embodiment state dropout (1.0),
+# meaning the model operates purely from vision + language (no proprioceptive state).
+#
+# Embodiment Mix Summary:
+#   | Embodiment               | # Datasets | Frames      | Mix Ratio | % of Total |
+#   |--------------------------|------------|-------------|-----------|------------|
+#   | cmr_versius              | 4          | 105,945,933 | 1.6000    | 19.20%     |
+#   | jhu_imerse_dvrk          | 12         |   5,269,530 | 2.9144    | 34.98%     |
+#   | jhu_imerse_dvrk_mono     | 1          |     516,334 | 0.3102    |  3.72%     |
+#   | jhu_lscr_dvrk_smarts     | 3          |     103,025 | 0.0619    |  0.74%     |
+#   | stanford_dvrk_real       | 3          |     874,437 | 0.5253    |  6.30%     |
+#   | obuda_dvrk               | 11         |   1,156,946 | 0.6949    |  8.34%     |
+#   | rob_surgical_bitrack     | 1          |   1,003,887 | 0.6031    |  7.24%     |
+#   | jhu_imerse_star_il       | 1          |     117,247 | 0.0704    |  0.85%     |
+#   | ustc_torin_tuodao        | 7          |     512,030 | 0.3075    |  3.69%     |
+#   | hamlyn_dvrk_30hz         | 6          |     544,573 | 0.3272    |  3.93%     |
+#   | ucsd_dvrk                | 2          |     314,917 | 0.1892    |  2.27%     |
+#   | ucb_dvrk                 | 1          |     221,950 | 0.1333    |  1.60%     |
+#   | turin_mitic_ex_vivo      | 4          |     997,835 | 0.5661    |  6.80%     |
+#   | tud_tundra_ur5e          | 1          |      47,753 | 0.0287    |  0.34%     |
+#   | **Total**                | **58**     |             | **8.3322**| **100.0%** |
+#
+# Usage (4 nodes x 8 GPUs):
+#   uv run torchrun --nnodes=4 --nproc_per_node=8 \
+#       --rdzv_endpoint=$MASTER_ADDR:$MASTER_PORT \
+#       gr00t/experiment/launch_train.py \
+#       --load-config-path open_h/gr00t_h_config.yaml
+#
+# IMPORTANT: replace every REPLACE_WITH_OPEN_H_DATA_PATH entry below with the
+# absolute root directory of your local Open-H datasets before launching.
+# These placeholder strings are documentation only; they are not expanded by YAML loading.
+
+data:
+  datasets:
+    # =========================================================================
+    # CMR Versius (4 datasets, embodiment_tag: cmr_versius)
+    # Total frames: 105,945,933  Mix ratio: 1.6000 (~19.20%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/cmr-surgical-60hz/cholecystectomy_phase_gesture_prompts_v1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/cmr-surgical-60hz/hysterectomy_phase_prompts_v1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/cmr-surgical-60hz/inguinal_hernia
+        - REPLACE_WITH_OPEN_H_DATA_PATH/cmr-surgical-60hz/prostatectomy
+      mix_ratio: 1.6000
+      embodiment_tag: cmr_versius
+
+    # =========================================================================
+    # JHU dVRK (12 datasets, embodiment_tag: jhu_imerse_dvrk)
+    # Total frames: 5,269,530  Mix ratio: 2.9144 (~34.98%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/LSCR/ARCADE/Cholecystectomy
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/LSCR/ARCADE/cautery
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/srth_porcine_chole
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/cao_cautery_combined
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/srt_needle_pickup+handover
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/srt_tissue_lift
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/Imerse/Wound_Closure/point_labeled
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/suturebot
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/Imerse/NephFat_extracted/nephfat
+      mix_ratio: 2.9144
+      embodiment_tag: jhu_imerse_dvrk
+      exclude_splits:
+        - missing_videos
+
+    # =========================================================================
+    # JHU dVRK Monocular (1 dataset, embodiment_tag: jhu_imerse_dvrk_mono)
+    # Used to keep compatible with Cosmos-Surg-dVRK evals
+    # Total frames: 516,334  Mix ratio: 0.3102 (~3.72%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/suturebot
+      mix_ratio: 0.3102
+      embodiment_tag: jhu_imerse_dvrk_mono
+
+    # =========================================================================
+    # JHU LSCR SMARTS (3 datasets, embodiment_tag: jhu_lscr_dvrk_smarts)
+    # Total frames: 103,025  Mix ratio: 0.0619 (~0.74%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/LSCR/SMARTS/offline_recorder_extracted/offline_data_part1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/LSCR/SMARTS/offline_recorder_extracted/offline_data_part2
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/LSCR/SMARTS/offline_recorder_extracted/offline_data_part3
+      mix_ratio: 0.0619
+      embodiment_tag: jhu_lscr_dvrk_smarts
+
+    # =========================================================================
+    # Stanford Real Robot dVRK (3 datasets, embodiment_tag: stanford_dvrk_real)
+    # Total frames: 874,437  Mix ratio: 0.5253 (~6.30%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)/Needle Transfer
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)/Tissue Retraction
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Stanford/Collaborative Haptics and Robotics in Medicine Lab/Real Robot (dVRK)/Peg Transfer
+      mix_ratio: 0.5253
+      embodiment_tag: stanford_dvrk_real
+      exclude_splits:
+        - fail
+        - bad_frames
+
+    # =========================================================================
+    # Obuda dVRK (11 datasets, embodiment_tag: obuda_dvrk)
+    # Total frames: 1,156,946  Mix ratio: 0.6949 (~8.34%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/FRS_Dome_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/NeedleThreading_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/PegTransfer_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Rollercoaster_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Seaspike_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/NeedleThreading_2
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/PegTransfer_2
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Pork_1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Seaspike_2
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Seaspike_3
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Obuda/Skinphantom_1
+      mix_ratio: 0.6949
+      embodiment_tag: obuda_dvrk
+
+    # =========================================================================
+    # Rob Surgical BiTrack (1 dataset, embodiment_tag: rob_surgical_bitrack)
+    # Total frames: 1,003,887  Mix ratio: 0.6031 (~7.24%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Rob Surgical/all_merged_data
+      mix_ratio: 0.6031
+      embodiment_tag: rob_surgical_bitrack
+
+    # =========================================================================
+    # JHU IMERSE star_IL (1 dataset, embodiment_tag: jhu_imerse_star_il)
+    # Total frames: 117,247  Mix ratio: 0.0704 (~0.85%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/JHU/Imerse/star_IL_extracted/star_IL
+      mix_ratio: 0.0704
+      embodiment_tag: jhu_imerse_star_il
+      exclude_splits:
+        - MISSING_VIDEOS
+
+    # =========================================================================
+    # USTC Torin/Tuodao (7 datasets, embodiment_tag: ustc_torin_tuodao)
+    # Total frames: 512,030  Mix ratio: 0.3075 (~3.69%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/exvivo_liver_sep
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/grasp_on_liver
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/invivo_liver_sep
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/ustc_knot_tying
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/Needle_handover
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/needle_pickup
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/USTC/tissue_lifting
+      mix_ratio: 0.3075
+      embodiment_tag: ustc_torin_tuodao
+
+    # =========================================================================
+    # Hamlyn Centre dVRK (6 datasets, embodiment_tag: hamlyn_dvrk_30hz)
+    # Total frames: 544,573  Mix ratio: 0.3272 (~3.93%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/Suturing-2
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/peg_transfer
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/Suturing-1
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/needle_grasp_and_handover
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/knot_tying
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Hamlyn/Tissue_Retraction
+      mix_ratio: 0.3272
+      embodiment_tag: hamlyn_dvrk_30hz
+      exclude_splits:
+        - failure
+
+    # =========================================================================
+    # UCSD Surgical Learning (2 datasets, embodiment_tag: ucsd_dvrk)
+    # Total frames: 314,917  Mix ratio: 0.1892 (~2.27%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/UCSD/surgical_learning_dataset
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/UCSD/surgical_learning_dataset2
+      mix_ratio: 0.1892
+      embodiment_tag: ucsd_dvrk
+
+    # =========================================================================
+    # UCBerkeley Debridement (1 dataset, embodiment_tag: ucb_dvrk)
+    # Total frames: 221,950  Mix ratio: 0.1333 (~1.60%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/UCBerkeley/debridement_lerobot
+      mix_ratio: 0.1333
+      embodiment_tag: ucb_dvrk
+
+    # =========================================================================
+    # Turin MITIC Ex Vivo (4 datasets, embodiment_tag: turin_mitic_ex_vivo)
+    # Total frames: 997,835  Mix ratio: 0.5661 (~6.80%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Turin/mitic_lerobot_ex_vivo
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Turin/mitic_lerobot_plastic_pad
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Turin/mitic_lerobot_plastic_pad_3DMED
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/Turin/mitic_lerobot_plastic_tube
+      mix_ratio: 0.5661
+      embodiment_tag: turin_mitic_ex_vivo
+      exclude_splits:
+        - failure
+        - MISSING_VIDEOS
+
+    # =========================================================================
+    # TUD TUNDRA (1 dataset, embodiment_tag: tud_tundra_ur5e)
+    # Total frames: 47,753  Mix ratio: 0.0287 (~0.34%)
+    # =========================================================================
+    - dataset_paths:
+        - REPLACE_WITH_OPEN_H_DATA_PATH/Surgical/TUD/260131_TUNDRA_dataset/grasping_retraction
+      mix_ratio: 0.0287
+      embodiment_tag: tud_tundra_ur5e
+
+  # Sharded dataset settings
+  shard_size: 1024
+  episode_sampling_rate: 0.1
+  num_shards_per_epoch: 100000
+
+model:
+  # Tunable components
+  tune_llm: true
+  tune_visual: true
+  tune_projector: true
+  tune_diffusion_model: true
+
+  # Image processing — 95% random crop
+  image_target_size: [236, 414]  # Intermediate padded size (height, width)
+  image_crop_size: [224, 392]  # Final crop size seen by the model
+
+  # Augmentations
+  random_rotation_angle: 5
+  color_jitter_params:
+    brightness: 0.12
+    contrast: 0.15
+    saturation: 0.15
+    hue: 0.02
+
+  # State dropout: controls whether the model sees proprioceptive state inputs.
+  # The two modes use different mechanisms:
+  #
+  # - state_dropout_prob: global probability applied uniformly to all embodiments.
+  #   Stochastic during training, disabled at inference. When triggered, the encoded
+  #   state features are replaced with a learned mask_token embedding.
+  #
+  # - state_dropout_prob_per_embodiment: per-embodiment overrides. When triggered,
+  #   the raw state vector is zeroed out BEFORE the state encoder, so the model
+  #   learns that encoder(zeros) = "no state available". At inference, prob >= 1.0
+  #   applies this zeroing deterministically so the model matches training behavior.
+  #   Embodiments not listed fall back to state_dropout_prob.
+  state_dropout_prob: 0.0
+  state_dropout_prob_per_embodiment:
+    cmr_versius: 1.0
+    jhu_imerse_dvrk: 1.0
+    jhu_imerse_dvrk_mono: 1.0
+    jhu_lscr_dvrk_smarts: 1.0
+    stanford_dvrk_real: 1.0
+    obuda_dvrk: 1.0
+    rob_surgical_bitrack: 1.0
+    ustc_torin_tuodao: 1.0
+    turin_mitic_ex_vivo: 1.0
+    tud_tundra_ur5e: 1.0
+    hamlyn_dvrk_30hz: 1.0
+    ucsd_dvrk: 1.0
+    ucb_dvrk: 1.0
+    jhu_imerse_star_il: 1.0
+
+  # Model settings
+  model_name: nvidia/Eagle-Block2A-2B-v2
+  eagle_collator: true
+  use_relative_action: true
+  load_bf16: false
+  reproject_vision: false
+  backbone_trainable_params_fp32: true
+
+  # Action horizon — padded to 50 for mixed embodiments
+  action_horizon: 50
+
+training:
+  # Base model
+  start_from_checkpoint: nvidia/GR00T-N1.6-3B
+  output_dir: output/gr00t_h
+
+  # Training hyperparameters
+  global_batch_size: 1024
+  learning_rate: 0.00003
+  weight_decay: 0.00001
+  warmup_ratio: 0.00
+  max_steps: 85000
+
+  # Optimizer
+  optim: adamw_torch
+  lr_scheduler_type: cosine
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+
+  # Checkpointing
+  save_steps: 1000
+  save_total_limit: 100
+
+  # Distributed training
+  num_gpus: 32
+  deepspeed_stage: 2
+
+  # Logging
+  use_wandb: true
+  wandb_project: finetune-gr00t-h
+  logging_steps: 10
+
+  # Data loading
+  dataloader_num_workers: 4
+
+  # Precision
+  bf16: true
+  tf32: true

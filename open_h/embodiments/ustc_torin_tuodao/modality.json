@@ -1,0 +1,21 @@
+{
+  "video": {
+    "endoscope_left": {"original_key": "observation.images.endoscope.left"},
+    "endoscope_right": {"original_key": "observation.images.endoscope.right"}
+  },
+  "state": {
+    "left_joints": {"start": 0, "end": 7},
+    "right_joints": {"start": 7, "end": 14},
+    "left_pose": {"start": 0, "end": 7, "original_key": "observation.current_target_psm"},
+    "right_pose": {"start": 8, "end": 15, "original_key": "observation.current_target_psm"}
+  },
+  "action": {
+    "left_pose": {"start": 0, "end": 7, "original_key": "action.cartesian_absolute"},
+    "left_gripper": {"start": 7, "end": 8, "original_key": "action.cartesian_absolute"},
+    "right_pose": {"start": 8, "end": 15, "original_key": "action.cartesian_absolute"},
+    "right_gripper": {"start": 15, "end": 16, "original_key": "action.cartesian_absolute"}
+  },
+  "annotation": {
+    "instruction": {"original_key": "instruction.text", "is_text": true}
+  }
+}

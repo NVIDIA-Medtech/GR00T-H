@@ -1,0 +1,59 @@
+{
+    "state": {
+        "psm1_pose": {
+            "start": 7,
+            "end": 13,
+            "original_key": "observation.state"
+        },
+        "psm1_gripper": {
+            "start": 6,
+            "end": 7,
+            "original_key": "observation.state"
+        },
+        "psm2_pose": {
+            "start": 20,
+            "end": 26,
+            "original_key": "observation.state"
+        },
+        "psm2_gripper": {
+            "start": 19,
+            "end": 20,
+            "original_key": "observation.state"
+        }
+    },
+    "action": {
+        "psm1_pose": {
+            "start": 1,
+            "end": 7,
+            "original_key": "action"
+        },
+        "psm1_gripper": {
+            "start": 0,
+            "end": 1,
+            "original_key": "action"
+        },
+        "psm2_pose": {
+            "start": 8,
+            "end": 14,
+            "original_key": "action"
+        },
+        "psm2_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "action"
+        }
+    },
+    "video": {
+        "endoscope_left": {
+            "original_key": "observation.images.camera_left"
+        },
+        "endoscope_right": {
+            "original_key": "observation.images.camera_right"
+        }
+    },
+    "annotation": {
+        "task": {
+            "original_key": "task_index"
+        }
+    }
+}

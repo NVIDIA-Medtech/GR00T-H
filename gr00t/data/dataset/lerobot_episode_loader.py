@@ -81,6 +81,9 @@ class LeRobotEpisodeLoader:
                          that specify temporal sampling and data keys to load
         video_backend: Video decoding backend ('torchcodec', 'decord', etc.)
         video_backend_kwargs: Additional arguments for the video backend
+        skip_video: If True, skip loading video data entirely. Useful for fast
+                   iteration during statistics calculation where only state/action
+                   data is needed. Default False.
 
     Example:
         >>> loader = LeRobotEpisodeLoader(
@@ -102,6 +105,8 @@ class LeRobotEpisodeLoader:
         modality_configs: dict[str, ModalityConfig],
         video_backend: str = "torchcodec",
         video_backend_kwargs: dict[str, Any] | None = None,
+        skip_video: bool = False,
+        require_stats: bool = True,
     ) -> None:
         """
         Initialize LeRobot episode loader with dataset path and modality configurations.
@@ -110,10 +115,21 @@ class LeRobotEpisodeLoader:
         1. Loading all metadata files from the dataset
         2. Parsing and validating modality configurations
         3. Computing effective episode lengths based on action horizon
+
+        Args:
+            dataset_path: Path to dataset root directory
+            modality_configs: Dictionary mapping modality names to ModalityConfig objects
+            video_backend: Video decoding backend ('torchcodec', 'decord', etc.)
+            video_backend_kwargs: Additional arguments for the video backend
+            skip_video: If True, skip loading video data (for fast stats calculation)
+            require_stats: If True, require stats.json to exist. Set to False when
+                          calculating statistics for the first time. Default True.
         """
         self.dataset_path = Path(dataset_path)
         self.video_backend = video_backend
         self.video_backend_kwargs = video_backend_kwargs
+        self.skip_video = skip_video
+        self.require_stats = require_stats
 
         if not self.dataset_path.is_dir():
             raise FileNotFoundError(f"Dataset path does not exist: {self.dataset_path}")
@@ -161,18 +177,22 @@ class LeRobotEpisodeLoader:
         with open(modality_path, "r") as f:
             self.modality_meta = json.load(f)
 
-        # Load dataset statistics for normalization
+        # Load dataset statistics for normalization (optional when calculating stats)
         stats_path = meta_dir / LEROBOT_STATS_FILE_NAME
-        assert stats_path.exists(), (
-            f"{stats_path} does not exist for {self.dataset_path}, please use gr00t/data/stats.py to generate it"
-        )
-        with open(stats_path, "r") as f:
-            self.stats = json.load(f)
+        if self.require_stats:
+            assert stats_path.exists(), (
+                f"{stats_path} does not exist for {self.dataset_path}, please use gr00t/data/stats.py to generate it"
+            )
+            with open(stats_path, "r") as f:
+                self.stats = json.load(f)
 
-        relative_stats_path = meta_dir / LEROBOT_RELATIVE_STATS_FILE_NAME
-        if relative_stats_path.exists():
-            with open(relative_stats_path, "r") as f:
-                self.stats["relative_action"] = json.load(f)
+            relative_stats_path = meta_dir / LEROBOT_RELATIVE_STATS_FILE_NAME
+            if relative_stats_path.exists():
+                with open(relative_stats_path, "r") as f:
+                    self.stats["relative_action"] = json.load(f)
+        else:
+            # Stats not required (e.g., when calculating them for the first time)
+            self.stats = {}
 
         # Extract key configuration parameters
         self.feature_config = self.info_meta.get("features", {})
@@ -284,6 +304,18 @@ class LeRobotEpisodeLoader:
         for group_name in joint_groups:
             if group_name in modality_info:
                 group_info = modality_info[group_name]
+                if "original_keys" in group_info:
+                    original_keys = group_info["original_keys"]
+                    start_idx = group_info.get("start", 0)
+                    end_idx = group_info.get("end", None)
+                    joint_data[group_name] = self._concat_original_key_values(
+                        df=df,
+                        original_keys=original_keys,
+                        start_idx=start_idx,
+                        end_idx=end_idx,
+                    )
+                    continue
+
                 start_idx = group_info["start"]
                 end_idx = group_info["end"]
                 original_key = group_info.get("original_key", DEFAULT_COLUMN_NAMES[modality_type])
@@ -299,13 +331,64 @@ class LeRobotEpisodeLoader:
 
         return joint_data
 
+    def _concat_original_key_values(
+        self,
+        df: pd.DataFrame,
+        original_keys: list[str],
+        start_idx: int = 0,
+        end_idx: int | None = None,
+    ) -> list[np.ndarray]:
+        """Concatenate multiple source columns into a single vector per row.
+
+        This supports modality.json entries that define `original_keys` as a list
+        of columns (e.g., pose.x, pose.y, pose.z, quat.x, quat.y, quat.z, quat.w)
+        which should be combined into a single state/action vector.
+
+        Args:
+            df: Episode DataFrame containing raw columns.
+            original_keys: Ordered list of column names to concatenate.
+            start_idx: Optional start index applied after concatenation.
+            end_idx: Optional end index applied after concatenation.
+
+        Returns:
+            List of numpy arrays, one per row, containing the concatenated values.
+
+        Raises:
+            KeyError: If any of the requested columns are missing from the DataFrame.
+        """
+        missing = [key for key in original_keys if key not in df.columns]
+        if missing:
+            raise KeyError(
+                f"Missing original_keys columns in dataset: {missing}. "
+                f"Available columns: {list(df.columns)}"
+            )
+
+        columns = [df[key] for key in original_keys]
+        combined: list[np.ndarray] = []
+        for row_idx in range(len(df)):
+            parts = []
+            for col in columns:
+                value = col.iloc[row_idx]
+                if isinstance(value, np.ndarray):
+                    array_value = value
+                elif isinstance(value, (list, tuple)):
+                    array_value = np.asarray(value)
+                else:
+                    array_value = np.asarray([value])
+                parts.append(np.atleast_1d(array_value))
+            concat_value = np.concatenate(parts, axis=0)
+            combined.append(concat_value[start_idx:end_idx])
+        return combined
+
     def _load_parquet_data(self, episode_index: int) -> pd.DataFrame:
         """
         Load and process parquet data for a specific episode.
 
         Handles the complete data loading pipeline:
         1. Load raw parquet file based on chunking structure
-        2. Process language annotations (convert task indices to strings)
+        2. Process language annotations:
+           - Convert task indices to strings using tasks.jsonl
+           - Or pass through raw text columns when annotation metadata sets is_text=True
         3. Extract state and action joint groups
 
         Args:
@@ -323,7 +406,7 @@ class LeRobotEpisodeLoader:
         original_df = pd.read_parquet(parquet_path)
         loaded_df = pd.DataFrame()
 
-        # Process language annotations (convert task indices to task strings)
+        # Process language annotations (task index -> string, or raw text pass-through)
         if "language" in self.modality_configs:
             for key in self.modality_configs["language"].modality_keys:
                 # these keys will be loaded separately from episodes.jsonl
@@ -334,10 +417,44 @@ class LeRobotEpisodeLoader:
                 assert subkey in self.modality_meta["annotation"], (
                     f"Key {subkey} not found in language modality"
                 )
-                original_key = self.modality_meta["annotation"][subkey].get("original_key", key)
-                loaded_df[f"language.{key}"] = original_df[original_key].apply(
-                    lambda x: self.tasks_map[x]
-                )
+                annotation_meta = self.modality_meta["annotation"][subkey]
+                original_key = annotation_meta.get("original_key", key)
+
+                if annotation_meta.get("is_text", False):
+                    # Pass through raw text columns (e.g., instruction.text)
+                    loaded_df[f"language.{key}"] = original_df[original_key].fillna("").astype(str)
+                else:
+                    # Map task indices -> task strings (tasks.jsonl)
+                    def _coerce_task_index(value: Any) -> int:
+                        """Normalize task index values for tasks.jsonl lookup.
+
+                        Some datasets store task indices as length-1 arrays or lists.
+                        This helper converts those into plain integers so they can be
+                        used as keys into tasks.jsonl.
+
+                        Args:
+                            value: Raw task index value from the parquet column.
+
+                        Returns:
+                            Integer task index suitable for tasks.jsonl mapping.
+
+                        Raises:
+                            ValueError: If the value cannot be coerced into a
+                                single integer task index.
+                        """
+                        if isinstance(value, np.ndarray):
+                            if value.size == 1:
+                                return int(value.item())
+                            raise ValueError(f"Task index array has size {value.size}")
+                        if isinstance(value, (list, tuple)):
+                            if len(value) == 1:
+                                return int(value[0])
+                            raise ValueError(f"Task index list has length {len(value)}")
+                        return int(value)
+
+                    loaded_df[f"language.{key}"] = original_df[original_key].apply(
+                        lambda x: self.tasks_map[_coerce_task_index(x)]
+                    )
 
         # Extract joint groups for state and action modalities
         for modality_type in ["state", "action"]:
@@ -468,26 +585,77 @@ class LeRobotEpisodeLoader:
 
         for modality in mapping.keys():  # state, action
             for joint_key in self.modality_configs[modality].modality_keys:
+                modality_meta = self.modality_meta[modality][joint_key]
                 # Determine which statistics key to use
-                if self.modality_meta[modality][joint_key].get("original_key", None) is not None:
-                    stats_key = self.modality_meta[modality][joint_key]["original_key"]
+                if modality_meta.get("original_keys") is not None:
+                    original_keys = modality_meta["original_keys"]
+                    start_idx = modality_meta.get("start", 0)
+                    end_idx = modality_meta.get("end", None)
+                    stat_types = self.stats[original_keys[0]].keys()
+                    for stat_type in stat_types:
+                        combined_stats = self._concat_stats_for_original_keys(
+                            original_keys=original_keys,
+                            stat_type=stat_type,
+                        )
+                        dataset_statistics[modality][joint_key][stat_type] = combined_stats[
+                            start_idx:end_idx
+                        ]
                 else:
-                    stats_key = mapping[modality]
+                    if modality_meta.get("original_key", None) is not None:
+                        stats_key = modality_meta["original_key"]
+                    else:
+                        stats_key = mapping[modality]
 
-                # Extract the relevant slice of statistics
-                start_idx, end_idx = (
-                    self.modality_meta[modality][joint_key]["start"],
-                    self.modality_meta[modality][joint_key]["end"],
-                )
-                for stat_type in self.stats[stats_key].keys():  # mean, std, min, max, q01, q99
-                    dataset_statistics[modality][joint_key][stat_type] = self.stats[stats_key][
-                        stat_type
-                    ][start_idx:end_idx]
+                    # Extract the relevant slice of statistics
+                    start_idx, end_idx = (
+                        modality_meta["start"],
+                        modality_meta["end"],
+                    )
+                    for stat_type in self.stats[stats_key].keys():  # mean, std, min, max, q01, q99
+                        dataset_statistics[modality][joint_key][stat_type] = self.stats[stats_key][
+                            stat_type
+                        ][start_idx:end_idx]
         stats = _to_plain_dict(dataset_statistics)
         # Directly add relative action stats
         if "relative_action" in self.stats:
             stats["relative_action"] = self.stats["relative_action"]
         return stats
+
+    def _concat_stats_for_original_keys(
+        self,
+        original_keys: list[str],
+        stat_type: str,
+    ) -> np.ndarray:
+        """Concatenate per-key stats from stats.json into a single vector.
+
+        Args:
+            original_keys: Ordered list of stats.json keys to concatenate.
+            stat_type: Stat type to extract (mean, std, min, max, q01, q99).
+
+        Returns:
+            Concatenated numpy array for the requested stat type.
+
+        Raises:
+            KeyError: If any of the stats keys or stat types are missing.
+        """
+        parts = []
+        missing = [key for key in original_keys if key not in self.stats]
+        if missing:
+            raise KeyError(
+                f"Missing stats entries for original_keys: {missing}. "
+                f"Available stats keys: {list(self.stats.keys())}"
+            )
+
+        for key in original_keys:
+            if stat_type not in self.stats[key]:
+                raise KeyError(
+                    f"Missing stat '{stat_type}' for key '{key}'. "
+                    f"Available stats: {list(self.stats[key].keys())}"
+                )
+            stat_value = np.asarray(self.stats[key][stat_type])
+            parts.append(np.atleast_1d(stat_value))
+
+        return np.concatenate(parts, axis=0)
 
     def create_language_from_meta(
         self, episode_meta: dict, nframes: int, lang_key: str
@@ -555,15 +723,156 @@ class LeRobotEpisodeLoader:
         actual_length = min(len(df), nominal_length)
         df = df.iloc[:actual_length]
 
-        # Load synchronized video data
-        video_data = self._load_video_data(episode_id, np.arange(actual_length))
+        # Load synchronized video data (skip if skip_video flag is set for fast stats calculation)
+        if not self.skip_video:
+            video_data = self._load_video_data(episode_id, np.arange(actual_length))
 
-        # Add video frames to dataframe as PIL Images
-        for key in video_data.keys():
-            assert len(video_data[key]) == len(df), (
-                f"Video data for {key} has length {len(video_data[key])} but dataframe has length {len(df)}"
-            )
-            df[f"video.{key}"] = [frame for frame in video_data[key]]
+            # Add video frames to dataframe as PIL Images
+            for key in video_data.keys():
+                assert len(video_data[key]) == len(df), (
+                    f"Video data for {key} has length {len(video_data[key])} but dataframe has length {len(df)}"
+                )
+                df[f"video.{key}"] = [frame for frame in video_data[key]]
+
+        return df
+
+    def get_sparse_episode(
+        self,
+        idx: int,
+        frame_indices: list[int] | np.ndarray,
+        video_indices: list[int] | np.ndarray | None = None,
+        allow_padding: bool = False,
+    ) -> pd.DataFrame:
+        """Load episode data for only specific frame indices (sparse loading).
+
+        This is a performance optimization for sharded datasets. Instead of loading
+        ALL video frames for an episode (which can be hundreds or thousands of frames
+        per camera view), this method loads only the specific frames needed for the
+        timesteps assigned to a shard.
+
+        The returned DataFrame preserves original frame indices in its index (not
+        reset to 0, 1, 2, ...), allowing extract_step_data() to correctly map
+        step_index + delta_indices to DataFrame positions via an index map.
+
+        Video indices are separated from state/action indices because the video
+        modality typically uses only delta_indices=[0] (current frame), while
+        actions use a long horizon (e.g., 16-50 future steps). Without this
+        decoupling, loading one timestep's action labels would force decoding
+        16-50 extra video frames for no reason.
+
+        Args:
+            idx: Episode index to load.
+            frame_indices: Frame indices to load for non-video modalities
+                (state, action, language). These define the parquet rows to keep.
+            video_indices: Frame indices to load for video modalities. If None,
+                defaults to frame_indices. Typically much smaller than
+                frame_indices since video delta_indices are usually just [0].
+            allow_padding: If True, clamp out-of-range indices to the valid
+                episode bounds. If False, raise on out-of-range indices to
+                surface data consistency issues.
+
+        Returns:
+            DataFrame with columns for all modalities, but only rows for the
+            requested frame_indices. The DataFrame.index contains the original
+            frame indices (not 0, 1, 2, ...) so downstream code can correctly
+            map step_index + delta to positions.
+
+        Raises:
+            IndexError: If episode index is out of bounds.
+            ValueError: If frame_indices is empty.
+
+        Example:
+            >>> # Load only frames 10, 50, 100 (state/action) and frame 10 (video)
+            >>> sparse_df = loader.get_sparse_episode(0, [10, 50, 100], video_indices=[10])
+            >>> sparse_df.index  # Int64Index([10, 50, 100]), not RangeIndex(0, 3)
+        """
+        if idx < 0 or idx >= len(self):
+            raise IndexError(f"Episode index {idx} out of bounds")
+
+        frame_indices = np.asarray(frame_indices, dtype=np.int64)
+        if len(frame_indices) == 0:
+            raise ValueError("frame_indices cannot be empty")
+        if video_indices is None:
+            video_indices = frame_indices
+        else:
+            video_indices = np.asarray(video_indices, dtype=np.int64)
+
+        episode_meta = self.episodes_metadata[idx]
+        episode_id = episode_meta["episode_index"]
+        nominal_length = episode_meta["length"]
+
+        # Load and parse the parquet data (state/action/language — fast, no video)
+        df = self._load_parquet_data(episode_id)
+
+        # Handle language from metadata (needs full frame count before subsetting)
+        if "language" in self.modality_configs:
+            lang_key = self.modality_configs["language"].modality_keys[0]
+            if lang_key in LANG_KEYS:
+                new_languages = self.create_language_from_meta(episode_meta, len(df), lang_key)
+                df["language." + lang_key] = new_languages
+
+        # Clamp to actual DataFrame length
+        actual_length = min(len(df), nominal_length)
+
+        # Validate and optionally clamp indices to valid range
+        def _validate_indices(name: str, indices: np.ndarray) -> None:
+            if len(indices) == 0:
+                return
+            if (indices < 0).any() or (indices >= actual_length).any():
+                raise ValueError(
+                    f"{name} out of range for episode {idx}: "
+                    f"min={int(indices.min())}, max={int(indices.max())}, "
+                    f"valid=[0, {actual_length - 1}]"
+                )
+
+        video_indices_same = video_indices is frame_indices
+
+        if allow_padding:
+            frame_indices = np.clip(frame_indices, 0, actual_length - 1)
+            frame_indices = np.unique(frame_indices)  # Remove duplicates and sort
+            if video_indices is not None and len(video_indices) > 0:
+                if video_indices_same:
+                    video_indices = frame_indices
+                else:
+                    video_indices = np.clip(video_indices, 0, actual_length - 1)
+                    video_indices = np.unique(video_indices)
+        else:
+            _validate_indices("frame_indices", frame_indices)
+            frame_indices = np.unique(frame_indices)
+            if video_indices is not None and len(video_indices) > 0:
+                if video_indices_same:
+                    video_indices = frame_indices
+                else:
+                    _validate_indices("video_indices", video_indices)
+                    video_indices = np.unique(video_indices)
+
+        # Merge video indices into frame set so the DataFrame contains rows for
+        # both state/action AND video indices
+        if video_indices is not None and len(video_indices) > 0:
+            frame_indices = np.unique(np.concatenate([frame_indices, video_indices]))
+
+        # Subset DataFrame to only requested frames, preserving original indices
+        # so that extract_step_data can map step_index + delta -> position
+        df = df.iloc[frame_indices].copy()
+        df.index = frame_indices  # Preserve original frame indices in the index
+
+        # Load ONLY the requested video frames (the key optimization).
+        # Instead of decoding all 700+ frames per camera view, we decode only
+        # the ~1-10 frames actually needed for the video modality's delta_indices.
+        if not self.skip_video and video_indices is not None and len(video_indices) > 0:
+            video_data = self._load_video_data(episode_id, video_indices)
+
+            # Insert video frames only at the corresponding video_indices rows.
+            # Other rows (needed only for state/action) get None in video columns
+            # and are never accessed by the video modality.
+            for key in video_data.keys():
+                df[f"video.{key}"] = [None] * len(df)
+                frames = [frame for frame in video_data[key]]
+                assert len(frames) == len(video_indices), (
+                    f"Video data for {key} has length {len(frames)} "
+                    f"but expected {len(video_indices)}"
+                )
+                df.loc[video_indices, f"video.{key}"] = frames
 
         # Load synchronized mask data
         mask_data = self._load_mask_data(episode_id, np.arange(actual_length))

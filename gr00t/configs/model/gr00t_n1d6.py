@@ -56,7 +56,7 @@ class Gr00tN1d6Config(PretrainedConfig):
     # Action head configuration parameters
     max_state_dim: int = 29  # Default from state_shape
     max_action_dim: int = 29  # Default from action_shape
-    action_horizon: int = 16
+    action_horizon: int = 50
     hidden_size: int = 1024
     input_embedding_dim: int = 1536
 
@@ -98,6 +98,7 @@ class Gr00tN1d6Config(PretrainedConfig):
 
     # State Augmentation parameters
     state_dropout_prob: float = 0.0  # State dropout probability
+    state_dropout_prob_per_embodiment: dict[str, float] | None = None  # Per-embodiment overrides
     state_additive_noise_scale: float = 0.0  # Scale for additive Gaussian noise on state features
 
     # Multi-embodiment parameters

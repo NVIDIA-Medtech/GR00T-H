@@ -72,9 +72,24 @@ class Gr00tN1d6ActionHead(nn.Module):
 
         # State dropout parameters
         self.state_dropout_prob = config.state_dropout_prob
+        self.state_dropout_prob_per_embodiment = getattr(
+            config, "state_dropout_prob_per_embodiment", None
+        )
+
+        # Build per-embodiment dropout lookup buffer
+        if self.state_dropout_prob_per_embodiment:
+            from .processing_gr00t_n1d6 import EMBODIMENT_TAG_TO_PROJECTOR_INDEX
+
+            dropout_buf = torch.zeros(config.max_num_embodiments)
+            for tag, prob in self.state_dropout_prob_per_embodiment.items():
+                if tag in EMBODIMENT_TAG_TO_PROJECTOR_INDEX:
+                    dropout_buf[EMBODIMENT_TAG_TO_PROJECTOR_INDEX[tag]] = prob
+            self.register_buffer("dropout_prob_by_embodiment", dropout_buf)
+
+        has_any_dropout = self.state_dropout_prob > 0 or self.state_dropout_prob_per_embodiment
         self.mask_token = (
             nn.Parameter(0.02 * torch.randn(1, 1, self.input_embedding_dim))
-            if self.state_dropout_prob > 0
+            if has_any_dropout
             else None
         )
 
@@ -101,7 +116,7 @@ class Gr00tN1d6ActionHead(nn.Module):
             self.action_decoder.requires_grad_(False)
             if self.config.add_pos_embed:
                 self.position_embedding.requires_grad_(False)
-            if self.state_dropout_prob > 0:
+            if self.mask_token is not None:
                 self.mask_token.requires_grad_(False)
         if not tune_diffusion_model:
             self.model.requires_grad_(False)
@@ -175,17 +190,31 @@ class Gr00tN1d6ActionHead(nn.Module):
         # Get embodiment ID.
         embodiment_id = action_input.embodiment_id
 
+        # Per-embodiment state dropout: zero state BEFORE encoding.
+        if self.state_dropout_prob_per_embodiment and hasattr(self, "dropout_prob_by_embodiment"):
+            dropout_probs = self.dropout_prob_by_embodiment[embodiment_id]  # (B,)
+            if self.training:
+                do_dropout = (
+                    torch.rand(action_input.state.shape[0], device=action_input.state.device)
+                    < dropout_probs
+                )
+            else:
+                do_dropout = dropout_probs > 0.999  # deterministic at inference
+            do_dropout = do_dropout[:, None, None].to(dtype=action_input.state.dtype)
+            action_input.state = action_input.state * (1 - do_dropout)
+
         # Embed state.
         state_features = self.state_encoder(action_input.state, embodiment_id)
 
-        # Dropout state features.
-        if self.state_dropout_prob > 0:
-            do_dropout = (
-                torch.rand(state_features.shape[0], device=state_features.device)
-                < self.state_dropout_prob
-            )
-            do_dropout = do_dropout[:, None, None].to(dtype=state_features.dtype)
-            state_features = state_features * (1 - do_dropout) + self.mask_token * do_dropout
+        # Global state dropout: replace encoded features with learned mask_token.
+        if self.mask_token is not None and self.state_dropout_prob > 0:
+            if self.training:
+                do_dropout = (
+                    torch.rand(state_features.shape[0], device=state_features.device)
+                    < self.state_dropout_prob
+                )
+                do_dropout = do_dropout[:, None, None].to(dtype=state_features.dtype)
+                state_features = state_features * (1 - do_dropout) + self.mask_token * do_dropout
 
         # Add Gaussian noise to state features.
         if self.training and self.state_additive_noise_scale > 0:
@@ -280,8 +309,16 @@ class Gr00tN1d6ActionHead(nn.Module):
         vl_embeds = backbone_output.backbone_features
         embodiment_id = action_input.embodiment_id
 
+        state = action_input.state
+
+        # Per-embodiment state dropout: zero state before encoding (deterministic at inference)
+        if self.state_dropout_prob_per_embodiment and hasattr(self, "dropout_prob_by_embodiment"):
+            dropout_probs = self.dropout_prob_by_embodiment[embodiment_id]
+            do_dropout = (dropout_probs > 0.999)[:, None, None].to(dtype=state.dtype)
+            state = state * (1 - do_dropout)
+
         # Embed state.
-        state_features = self.state_encoder(action_input.state, embodiment_id)
+        state_features = self.state_encoder(state, embodiment_id)
 
         return BatchFeature(data={"backbone_features": vl_embeds, "state_features": state_features})
 

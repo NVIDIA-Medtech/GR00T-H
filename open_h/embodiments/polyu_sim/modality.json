@@ -1,0 +1,13 @@
+{
+  "video": {
+    "endoscope": {"original_key": "observation.images.main"}
+  },
+  "state": {
+    "psm_joints": {"start": 0, "end": 10},
+    "psm_cartesian_pose": {"start": 0, "end": 7, "original_key": "observation.cartesian_state"}
+  },
+  "action": {
+    "psm_cartesian_pose": {"start": 0, "end": 7, "original_key": "observation.cartesian_state"},
+    "psm_gripper": {"start": 10, "end": 11, "original_key": "action"}
+  }
+}

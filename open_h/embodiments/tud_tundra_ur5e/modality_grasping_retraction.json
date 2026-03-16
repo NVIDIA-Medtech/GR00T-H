@@ -1,0 +1,39 @@
+{
+    "state": {
+        "joint_position": {
+            "start": 8,
+            "end": 14,
+            "original_key": "observation.state"
+        },
+        "eef_pose": {
+            "start": 26,
+            "end": 33,
+            "original_key": "observation.state"
+        }
+    },
+    "action": {
+        "eef_pose": {
+            "start": 26,
+            "end": 33,
+            "original_key": "observation.state"
+        },
+        "gripper": {
+            "start": 4,
+            "end": 5,
+            "original_key": "action"
+        }
+    },
+    "video": {
+        "laparoscope_left": {
+            "original_key": "observation.images.laparoscope_left"
+        },
+        "laparoscope_right": {
+            "original_key": "observation.images.laparoscope_right"
+        }
+    },
+    "annotation": {
+        "task": {
+            "original_key": "task_index"
+        }
+    }
+}

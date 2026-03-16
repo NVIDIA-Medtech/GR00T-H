@@ -375,8 +375,14 @@ class Gr00tPolicy(BasePolicy):
         Raises:
             AssertionError: If any validation check fails
         """
-        # Validate each action key defined in the modality config
-        for action_key in self.modality_configs["action"].modality_keys:
+        # Validate each action key defined in the modality config (excluding pass_through_keys)
+        action_config = self.modality_configs["action"]
+
+        # Skip keys used for intermediate action calculations
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        for action_key in action_config.modality_keys:
+            if action_key in pass_through_keys:
+                continue  # Pass-through keys are removed during processing
             # Check that the expected action key exists
             assert action_key in action, f"Action key '{action_key}' must be in action"
 
@@ -635,9 +641,13 @@ class Gr00tSimPolicyWrapper(PolicyWrapper):
             AssertionError: If any validation check fails
         """
         modality_configs = self.get_modality_config()
+        action_config = modality_configs["action"]
+        pass_through_keys = set(action_config.pass_through_keys or [])
 
-        # Validate each action key defined in the modality config
-        for action_key in modality_configs["action"].modality_keys:
+        # Validate each action key defined in the modality config (excluding pass_through_keys)
+        for action_key in action_config.modality_keys:
+            if action_key in pass_through_keys:
+                continue  # Pass-through keys are removed during processing
             # Construct flat key expected in Gr00t sim environment (e.g., 'action.joints')
             parsed_key = f"action.{action_key}"
             assert parsed_key in action, f"Action key '{parsed_key}' must be in action"

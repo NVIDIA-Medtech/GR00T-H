@@ -64,7 +64,7 @@ gpu = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["gr00t*"]
+include = ["gr00t*", "open_h*"]
 
 [tool.uv.extra-build-dependencies]
 flash-attn = ["torch==2.7.1", "numpy==1.26.4", "triton==3.3.1"]

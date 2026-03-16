@@ -99,7 +99,11 @@ class ReplayPolicy(BasePolicy):
 
     def _preload_actions(self) -> None:
         """Preload all actions from the current episode for efficient replay."""
-        action_keys = self.modality_configs["action"].modality_keys
+        action_config = self.modality_configs["action"]
+
+        # Skip keys used for intermediate action calculations
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        action_keys = [k for k in action_config.modality_keys if k not in pass_through_keys]
         self.actions: dict[str, np.ndarray] = {}
 
         for key in action_keys:
@@ -267,7 +271,11 @@ class ReplayPolicy(BasePolicy):
         Raises:
             AssertionError: If any validation check fails
         """
-        for action_key in self.modality_configs["action"].modality_keys:
+        action_config = self.modality_configs["action"]
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        for action_key in action_config.modality_keys:
+            if action_key in pass_through_keys:
+                continue  # Pass-through keys are removed during processing
             assert action_key in action, f"Action key '{action_key}' must be in action"
 
             action_arr = action[action_key]
