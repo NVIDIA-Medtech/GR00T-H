@@ -1,0 +1,64 @@
+{
+    "state": {
+        "relative_tip_position": {
+            "start": 0,
+            "end": 3,
+            "original_key": "observation.state"
+        },
+        "joint_position": {
+            "start": 3,
+            "end": 9,
+            "original_key": "observation.state"
+        },
+        "joint_velocity": {
+            "start": 9,
+            "end": 15,
+            "original_key": "observation.state"
+        },
+        "joint_effort": {
+            "start": 15,
+            "end": 21,
+            "original_key": "observation.state"
+        },
+        "eef_pose": {
+            "start": 21,
+            "end": 28,
+            "original_key": "observation.state"
+        },
+        "initial_tip_position": {
+            "start": 28,
+            "end": 31,
+            "original_key": "observation.state"
+        },
+        "rcm_position": {
+            "start": 31,
+            "end": 34,
+            "original_key": "observation.state"
+        },
+        "roll_angle": {
+            "start": 34,
+            "end": 35,
+            "original_key": "observation.state"
+        }
+    },
+    "action": {
+        "delta_tip_pose": {
+            "start": 0,
+            "end": 4,
+            "original_key": "action"
+        }
+    },
+    "video": {
+        "laparoscope_left": {
+            "original_key": "observation.images.laparoscope_left"
+        },
+        "laparoscope_right": {
+            "original_key": "observation.images.laparoscope_right"
+        }
+    },
+    "annotation": {
+        "task": {
+            "original_key": "task_index"
+        }
+    }
+}

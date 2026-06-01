@@ -1,0 +1,35 @@
+{
+    "state": {
+        "right_arm_joints": {
+            "start": 0,
+            "end": 9
+        },
+        "left_arm_joints": {
+            "start": 9,
+            "end": 18
+        }
+    },
+    "action": {
+        "right_arm_delta_xyz": {
+            "start": 0,
+            "end": 3
+        },
+        "left_arm_delta_xyz": {
+            "start": 3,
+            "end": 6
+        }
+    },
+    "video": {
+        "scope": {
+            "original_key": "observation.images.scope"
+        },
+        "topcam": {
+            "original_key": "observation.images.topcam"
+        }
+    },
+    "annotation": {
+        "task": {
+            "original_key": "task_index"
+        }
+    }
+}

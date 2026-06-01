@@ -17,7 +17,6 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
-import random
 import re
 from typing import Any, Dict
 import warnings
@@ -56,19 +55,32 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="google.pr
 EMBODIMENT_TAG_TO_PROJECTOR_INDEX = {
     ##### Pretrain embodiment ids (in base model) #####
     "oxe_droid_relative_eef_relative_joint": 24,
-    "xdof_relative_eef_relative_joint": 27,
-    "xdof_relative_eef_relative_joint_subtask": 27,
-    "real_g1_relative_eef_relative_joints": 25,
-    "real_r1_pro_sharpa_relative_eef": 26,
-    "real_r1_pro_sharpa_relative_eef_human": 26,
-    "real_r1_pro_sharpa_relative_eef_maxinsights": 26,
-    "real_r1_pro_sharpa_relative_eef_mecka": 26,
     ##### Posttrain embodiment ids #####
-    "unitree_g1_full_body_with_waist_height_nav_cmd": 25,
     "simpler_env_google": 0,
     "simpler_env_widowx": 1,
     "libero_sim": 2,
     "new_embodiment": 10,
+    ##### Open-H embodiment ids #####
+    "jhu_imerse_dvrk": 3,
+    "cmr_versius": 4,
+    "ucb_dvrk": 5,
+    "sanoscience_sim": 6,
+    "tum_sonata_franka": 7,
+    "hamlyn_dvrk_15hz": 9,
+    "hamlyn_dvrk_30hz": 11,
+    "ustc_torin_tuodao": 12,
+    "ucsd_dvrk": 14,
+    "jhu_imerse_dvrk_mono": 15,
+    "rob_surgical_bitrack": 16,
+    "stanford_dvrk_real": 17,
+    "obuda_dvrk": 18,
+    "polyu_sim": 19,
+    "moon_maestro": 21,
+    "jhu_lscr_dvrk_miracle": 22,
+    "jhu_lscr_dvrk_smarts": 23,
+    "tud_tundra_ur5e": 25,
+    "turin_mitic_ex_vivo": 26,
+    "jhu_imerse_star_il": 27,
 }
 
 
@@ -165,7 +177,6 @@ class Gr00tN1d7Processor(BaseProcessor):
         transformers_loading_kwargs: dict = {"trust_remote_code": True},
         # State augmentation
         exclude_state: bool = False,
-        state_dropout_prob: float = 0.0,
         # Normalization
         use_mean_std: bool = False,
         # Backward-compat params (stored but not actively used)
@@ -193,7 +204,6 @@ class Gr00tN1d7Processor(BaseProcessor):
 
         # State augmentation settings
         self.exclude_state = exclude_state
-        self.state_dropout_prob = state_dropout_prob
 
         self.letter_box_transform = letter_box_transform
 
@@ -295,11 +305,13 @@ class Gr00tN1d7Processor(BaseProcessor):
         state: dict[str, np.ndarray] | None = None,
     ):
         """Undo action normalization and convert relative actions to absolute."""
-        # Split concatenated action into joint groups
+        # Split concatenated action into joint groups (excluding pass_through_keys)
         out_dict = {}
         start_idx = 0
-        joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
-        action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
+        action_config = self.modality_configs[embodiment_tag.value]["action"]
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        joint_groups = [k for k in action_config.modality_keys if k not in pass_through_keys]
+        action_horizon = len(action_config.delta_indices)
         for key in joint_groups:
             joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
                 key
@@ -332,8 +344,10 @@ class Gr00tN1d7Processor(BaseProcessor):
         """
         out_dict = {}
         start_idx = 0
-        joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
-        action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
+        action_config = self.modality_configs[embodiment_tag.value]["action"]
+        pass_through_keys = set(action_config.pass_through_keys or [])
+        joint_groups = [k for k in action_config.modality_keys if k not in pass_through_keys]
+        action_horizon = len(action_config.delta_indices)
         for key in joint_groups:
             joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
                 key
@@ -366,7 +380,9 @@ class Gr00tN1d7Processor(BaseProcessor):
         transformed_observation = {}
 
         # Normalize states
-        state_keys = modality_config["state"].modality_keys
+        state_config = modality_config["state"]
+        pass_through_keys = set(state_config.pass_through_keys or [])
+        state_keys = [k for k in state_config.modality_keys if k not in pass_through_keys]
         state_data = {key: observation[f"state.{key}"] for key in state_keys}
         exclude_state = self.exclude_state or getattr(
             modality_config["state"], "exclude_state", False
@@ -500,8 +516,10 @@ class Gr00tN1d7Processor(BaseProcessor):
         )
 
         if normalized_actions:
-            # Concatenate actions
-            action_keys = self.modality_configs[embodiment_tag.value]["action"].modality_keys
+            # Concatenate actions (excluding pass_through_keys which were removed by StateActionProcessor)
+            action_config = self.modality_configs[embodiment_tag.value]["action"]
+            pass_through_keys = set(action_config.pass_through_keys or [])
+            action_keys = [k for k in action_config.modality_keys if k not in pass_through_keys]
             normalized_actions = torch.cat(
                 [torch.from_numpy(normalized_actions[key]) for key in action_keys],
                 dim=-1,
@@ -539,16 +557,17 @@ class Gr00tN1d7Processor(BaseProcessor):
             normalized_actions = None
             action_mask = None
 
-        # Concatenate states with optional dropout/noise augmentation
-        state_keys = self.modality_configs[embodiment_tag.value]["state"].modality_keys
+        # Concatenate states.
+        state_config = self.modality_configs[embodiment_tag.value]["state"]
+        pass_through_keys = getattr(state_config, "pass_through_keys", None) or []
+        pass_through_key_set = set(pass_through_keys)
+        state_keys = state_config.modality_keys
+        if pass_through_key_set:
+            state_keys = [key for key in state_keys if key not in pass_through_key_set]
         exclude_state = self.exclude_state or getattr(
             self.modality_configs[embodiment_tag.value]["state"], "exclude_state", False
         )
-        if exclude_state or (
-            self.state_dropout_prob > 0
-            and random.random() < self.state_dropout_prob
-            and self.training
-        ):
+        if exclude_state:
             normalized_states = torch.cat(
                 [torch.from_numpy(np.zeros_like(state_data[key])) for key in state_keys], dim=-1
             )
@@ -689,7 +708,6 @@ class Gr00tN1d7Processor(BaseProcessor):
                 "use_relative_action": self.use_relative_action,
                 # State augmentation
                 "exclude_state": self.exclude_state,
-                "state_dropout_prob": self.state_dropout_prob,
             },
         }
         with open(main_config_file, "w") as f:
@@ -753,8 +771,15 @@ class Gr00tN1d7Processor(BaseProcessor):
                 "random_rotation_angle",
                 "color_jitter_params",
                 "use_relative_action",
+                "extra_augmentation_config",
+                "use_percentiles",
+                "image_crop_size",
+                "image_target_size",
+                "use_albumentations",
+                "shortest_image_edge",
+                "crop_fraction",
+                "max_action_horizon",
                 "exclude_state",
-                "state_dropout_prob",
                 "use_mean_std",
                 "model_name",
                 "model_type",
@@ -762,8 +787,8 @@ class Gr00tN1d7Processor(BaseProcessor):
             for key in override_keys:
                 if key in kwargs:
                     override = kwargs.pop(key)
-                    if override is not None:
-                        processor_kwargs[key] = override
+                    # Allow None as a valid override value for image config
+                    processor_kwargs[key] = override
         return cls(**processor_kwargs, transformers_loading_kwargs=transformers_loading_kwargs)
 
 

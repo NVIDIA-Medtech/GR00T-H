@@ -1,0 +1,83 @@
+{
+    "state": {
+        "left_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "action"
+        },
+        "left_gripper": {
+            "start": 10,
+            "end": 11,
+            "original_key": "action"
+        },
+        "right_pose": {
+            "start": 13,
+            "end": 20,
+            "original_key": "action"
+        },
+        "right_gripper": {
+            "start": 23,
+            "end": 24,
+            "original_key": "action"
+        },
+        "translation_scaling": {
+            "start": 12,
+            "end": 13,
+            "original_key": "observation.state"
+        },
+        "rotation_scaling": {
+            "start": 13,
+            "end": 14,
+            "original_key": "observation.state"
+        },
+        "hapticengaged_left": {
+            "start": 16,
+            "end": 17,
+            "original_key": "observation.state"
+        },
+        "hapticengaged_right": {
+            "start": 17,
+            "end": 18,
+            "original_key": "observation.state"
+        }
+    },
+    "action": {
+        "left_pose": {
+            "start": 0,
+            "end": 7
+        },
+        "left_gripper": {
+            "start": 10,
+            "end": 11
+        },
+        "right_pose": {
+            "start": 13,
+            "end": 20
+        },
+        "right_gripper": {
+            "start": 23,
+            "end": 24
+        },
+        "hapticengaged_left": {
+            "start": 16,
+            "end": 17,
+            "original_key": "observation.state"
+        },
+        "hapticengaged_right": {
+            "start": 17,
+            "end": 18,
+            "original_key": "observation.state"
+        }
+    },
+    "video": {
+        "endoscope": {
+            "original_key": "observation.images.endoscope"
+        }
+    },
+    "annotation": {
+        "human.task_description": {
+            "original_key": "instruction.text_with_state",
+            "is_text": true
+        }
+    }
+}

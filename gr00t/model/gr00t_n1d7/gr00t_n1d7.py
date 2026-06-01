@@ -97,6 +97,18 @@ class Gr00tN1d7ActionHead(nn.Module):
 
         # State dropout parameters
         self.state_dropout_prob = config.state_dropout_prob
+        self.state_dropout_prob_per_embodiment = getattr(
+            config, "state_dropout_prob_per_embodiment", None
+        )
+
+        if self.state_dropout_prob_per_embodiment:
+            from .processing_gr00t_n1d7 import EMBODIMENT_TAG_TO_PROJECTOR_INDEX
+
+            dropout_buf = torch.zeros(config.max_num_embodiments)
+            for tag, prob in self.state_dropout_prob_per_embodiment.items():
+                if tag in EMBODIMENT_TAG_TO_PROJECTOR_INDEX:
+                    dropout_buf[EMBODIMENT_TAG_TO_PROJECTOR_INDEX[tag]] = prob
+            self.register_buffer("dropout_prob_by_embodiment", dropout_buf)
 
         self.beta_dist = Beta(config.noise_beta_alpha, config.noise_beta_beta)
         self.num_timestep_buckets = config.num_timestep_buckets
@@ -198,6 +210,19 @@ class Gr00tN1d7ActionHead(nn.Module):
         # Handle state history
         assert action_input.state.shape[1] == self.config.state_history_length
         action_input.state = action_input.state.view(action_input.state.shape[0], 1, -1)
+
+        # Per-embodiment state dropout: zero state before encoding.
+        if self.state_dropout_prob_per_embodiment and hasattr(self, "dropout_prob_by_embodiment"):
+            dropout_probs = self.dropout_prob_by_embodiment[embodiment_id]
+            if self.training:
+                do_dropout = (
+                    torch.rand(action_input.state.shape[0], device=action_input.state.device)
+                    < dropout_probs
+                )
+            else:
+                do_dropout = dropout_probs > 0.999
+            do_dropout = do_dropout[:, None, None].to(dtype=action_input.state.dtype)
+            action_input.state = action_input.state * (1 - do_dropout)
 
         # Embed state.
         state_features = self.state_encoder(action_input.state, embodiment_id)
@@ -302,6 +327,12 @@ class Gr00tN1d7ActionHead(nn.Module):
         assert current_T == self.config.state_history_length, "current_T != state_history_length"
         # Reshape state from [B, state_history_length, max_state_dim] to [B, 1, state_history_length * max_state_dim]
         state = state.view(state.shape[0], 1, -1)
+
+        # Per-embodiment state dropout: zero state before encoding (deterministic at inference).
+        if self.state_dropout_prob_per_embodiment and hasattr(self, "dropout_prob_by_embodiment"):
+            dropout_probs = self.dropout_prob_by_embodiment[embodiment_id]
+            do_dropout = (dropout_probs > 0.999)[:, None, None].to(dtype=state.dtype)
+            state = state * (1 - do_dropout)
 
         # Embed state.
         state_features = self.state_encoder(state, embodiment_id)

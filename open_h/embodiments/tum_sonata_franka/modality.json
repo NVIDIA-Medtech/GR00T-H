@@ -1,0 +1,15 @@
+{
+  "video": {
+    "tpv_camera": {"original_key": "observation.images.tpv_camera"},
+    "wrist_camera": {"original_key": "observation.images.wrist_camera"},
+    "ultrasound": {"original_key": "observation.images.ultrasound"}
+  },
+  "state": {
+    "joint_angles": {"start": 0, "end": 7},
+    "force_torque": {"start": 0, "end": 6, "original_key": "observation.meta.force_torque"},
+    "eef_pose": {"start": 0, "end": 6, "original_key": "action"}
+  },
+  "action": {
+    "eef_pose": {"start": 0, "end": 6}
+  }
+}

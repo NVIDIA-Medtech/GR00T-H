@@ -1,4 +1,5 @@
-# Default platform pyproject.toml (x86, GB200, and any non-Jetson GPU)
+# Default platform pyproject.toml for Linux x86_64 dGPU systems.
+# Use scripts/deployment/{orin,thor,spark}/pyproject.toml for aarch64 platforms.
 
 [build-system]
 requires = ["setuptools>=67", "wheel", "pip"]
@@ -38,7 +39,7 @@ dependencies = [
     "scipy==1.15.3",
     # x86_64: PyPI wheel; aarch64 Linux: prebuilt wheel in scripts/deployment/dgpu/wheels/
     "torchcodec==0.4.0; platform_machine == 'x86_64'",
-    "torchcodec==0.10.0a0; platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "torchcodec==0.10.0; platform_machine == 'aarch64' and sys_platform == 'linux'",
     "wandb==0.23.0",
     "pyzmq==27.0.1",
     # deepspeed has no aarch64 Linux wheel
@@ -65,12 +66,15 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["gr00t*"]
+include = ["gr00t*", "open_h*"]
 
 [tool.uv]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
-    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+    # Use the deployment-specific Orin/Thor/Spark pyprojects for aarch64 locks.
 ]
 
 [tool.uv.sources]
@@ -86,10 +90,12 @@ triton = [
 flash-attn = [
     { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.7cxx11abiFALSE-cp310-cp310-linux_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.10'" },
     { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.7cxx11abiFALSE-cp312-cp312-linux_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'" },
-    { path = "scripts/deployment/dgpu/wheels/flash_attn-2.7.4.post1-cp310-cp310-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64' and python_version == '3.10'" },
+    # The aarch64 wheel is not included in the public repo; let uv resolve it externally.
+    # { path = "scripts/deployment/dgpu/wheels/flash_attn-2.7.4.post1-cp310-cp310-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64' and python_version == '3.10'" },
 ]
 torchcodec = [
-    { path = "scripts/deployment/dgpu/wheels/torchcodec-0.10.0a0-cp310-cp310-linux_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
+    # The aarch64 wheel is not included in the public repo; resolve it from the public SBSA index.
+    { index = "jetson-sbsa-cu130", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
 ]
 
 [tool.uv.extra-build-dependencies]
@@ -148,4 +154,9 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "jetson-sbsa-cu130"
+url = "https://pypi.jetson-ai-lab.io/sbsa/cu130/+simple"
 explicit = true

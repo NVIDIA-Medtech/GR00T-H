@@ -87,7 +87,11 @@ class Gr00tN1d7Pipeline(ModelPipeline):
                 tune_diffusion_model=self.config.model.tune_diffusion_model,
                 tune_vlln=self.config.model.tune_vlln,
                 state_dropout_prob=self.config.model.state_dropout_prob,
+                state_dropout_prob_per_embodiment=getattr(
+                    self.config.model, "state_dropout_prob_per_embodiment", None
+                ),
                 backbone_trainable_params_fp32=self.config.model.backbone_trainable_params_fp32,
+                action_horizon=self.config.model.action_horizon,
                 load_bf16=self.config.model.load_bf16,
                 transformers_loading_kwargs=self.transformers_loading_kwargs,
                 output_loading_info=True,
@@ -95,20 +99,13 @@ class Gr00tN1d7Pipeline(ModelPipeline):
             )
 
             missing_keys = loading_info.get("missing_keys", [])
-            mask_token_missing = any("mask_token" in key for key in missing_keys)
-            if mask_token_missing and model.action_head.mask_token is not None:
-                with torch.no_grad():
-                    model.action_head.mask_token.data.copy_(
-                        0.02 * torch.randn_like(model.action_head.mask_token)
-                    )
-                logging.info("mask_token not in checkpoint - initialized")
-
+            allowed_missing_keys = {"action_head.dropout_prob_by_embodiment"}
+            missing_keys = [key for key in missing_keys if key not in allowed_missing_keys]
             unexpected_keys = loading_info.get("unexpected_keys", [])
             mismatched_keys = loading_info.get("mismatched_keys", [])
-            other_missing = [k for k in missing_keys if "mask_token" not in k]
             errors = []
-            if other_missing:
-                errors.append(f"Missing keys ({len(other_missing)}): {other_missing}")
+            if missing_keys:
+                errors.append(f"Missing keys ({len(missing_keys)}): {missing_keys}")
             if unexpected_keys:
                 errors.append(f"Unexpected keys ({len(unexpected_keys)}): {unexpected_keys}")
             if mismatched_keys:
@@ -174,7 +171,6 @@ class Gr00tN1d7Pipeline(ModelPipeline):
                 use_relative_action=self.model_config.use_relative_action,
                 # State augmentation overrides
                 exclude_state=self.model_config.exclude_state,
-                state_dropout_prob=self.model_config.state_dropout_prob,
                 use_mean_std=self.model_config.use_mean_std,
                 **self.transformers_loading_kwargs,
             )
@@ -202,7 +198,6 @@ class Gr00tN1d7Pipeline(ModelPipeline):
                 use_relative_action=self.model_config.use_relative_action,
                 # State augmentation
                 exclude_state=self.model_config.exclude_state,
-                state_dropout_prob=self.model_config.state_dropout_prob,
                 use_mean_std=self.model_config.use_mean_std,
                 transformers_loading_kwargs=self.transformers_loading_kwargs,
             )

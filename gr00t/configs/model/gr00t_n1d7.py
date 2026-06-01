@@ -72,7 +72,7 @@ class Gr00tN1d7Config(PretrainedConfig):
     # Action head configuration parameters
     max_state_dim: int = 132  # Default from state_shape
     max_action_dim: int = 132  # Default from action_shape
-    action_horizon: int = 40
+    action_horizon: int = 50
     hidden_size: int = 1024
     input_embedding_dim: int = 1536
 
@@ -115,6 +115,7 @@ class Gr00tN1d7Config(PretrainedConfig):
 
     # State augmentation parameters
     state_dropout_prob: float = 0.8  # State dropout probability
+    state_dropout_prob_per_embodiment: dict[str, float] | None = None  # Per-embodiment overrides
     exclude_state: bool = False  # Zero out all state inputs (ablation)
     use_mean_std: bool = False  # Use mean/std normalization instead of min/max
 

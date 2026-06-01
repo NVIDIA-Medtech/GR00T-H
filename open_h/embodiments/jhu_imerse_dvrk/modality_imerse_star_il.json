@@ -1,0 +1,37 @@
+{
+    "state": {
+        "kuka_joint_pos": {
+            "start": 0,
+            "end": 7
+        },
+        "endo360_joint_pos": {
+            "start": 7,
+            "end": 8
+        },
+        "kuka_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "action"
+        }
+    },
+    "action": {
+        "kuka_pose": {
+            "start": 0,
+            "end": 7
+        }
+    },
+    "video": {
+        "endoscope_left": {
+            "original_key": "observation.images.endoscope.left"
+        },
+        "wrist_left": {
+            "original_key": "observation.images.wrist.left"
+        }
+    },
+    "annotation": {
+        "human.task_description": {
+            "original_key": "instruction.text",
+            "is_text": true
+        }
+    }
+}

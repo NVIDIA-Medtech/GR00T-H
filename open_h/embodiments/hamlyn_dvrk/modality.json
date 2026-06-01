@@ -1,0 +1,62 @@
+{
+    "state": {
+        "left_arm_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "observation.state.left_arm_cartesian"
+        },
+        "left_arm_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "observation.state.left_arm_cartesian"
+        },
+        "right_arm_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "observation.state.right_arm_cartesian"
+        },
+        "right_arm_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "observation.state.right_arm_cartesian"
+        }
+    },
+    "action": {
+        "left_arm_pose": {
+            "start": 0,
+            "end": 7,
+            "original_key": "action.cartesian_absolute"
+        },
+        "left_arm_gripper": {
+            "start": 7,
+            "end": 8,
+            "original_key": "action.cartesian_absolute"
+        },
+        "right_arm_pose": {
+            "start": 8,
+            "end": 15,
+            "original_key": "action.cartesian_absolute"
+        },
+        "right_arm_gripper": {
+            "start": 15,
+            "end": 16,
+            "original_key": "action.cartesian_absolute"
+        }
+    },
+    "video": {
+        "endoscope": {
+            "original_key": "observation.images.color"
+        },
+        "wrist_left": {
+            "original_key": "observation.images.wrist_left"
+        },
+        "wrist_right": {
+            "original_key": "observation.images.wrist_right"
+        }
+    },
+    "annotation": {
+        "task": {
+            "original_key": "task_index"
+        }
+    }
+}
