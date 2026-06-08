@@ -6,7 +6,7 @@
 [![Open-H Dataset](https://img.shields.io/badge/Dataset-Open--H-orange)](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 
-A healthcare robotics variant of [GR00T N1.7](https://github.com/NVIDIA/Isaac-GR00T), post-trained on the [Open-H dataset](open_h/README.md) for multi-embodiment surgical and healthcare robot autonomy across 16 robot platforms and 34+ institutions.
+A healthcare robotics variant of [GR00T N1.7](https://github.com/NVIDIA/Isaac-GR00T), post-trained on the [Open-H dataset](open_h/README.md) for multi-embodiment surgical and healthcare robot autonomy. The Open-H dataset spans 16 robot platforms and 34+ institutions.
 
 <p align="center">
   <img src="media/gr00t-h-header.png" width="800" alt="GR00T-H Header"/>
@@ -15,6 +15,8 @@ A healthcare robotics variant of [GR00T N1.7](https://github.com/NVIDIA/Isaac-GR
 ## Overview
 
 GR00T-H post-trains the GR00T N1.7 vision-language-action (VLA) foundation model on surgical robot data from multiple institutions and robot platforms simultaneously. Each institution records data differently: different robots, coordinate conventions, frame rates, camera setups, and state/action representations. GR00T-H addresses this by defining per-embodiment modality configs that convert each dataset into a common representation (`REL_XYZ_ROT6D` for EEF poses) while sharing the core VLA backbone.
+
+The Open-H embodiment table documents dataset and modality-config coverage. Direct inference with a released Hugging Face checkpoint is limited to the embodiment tags included in that checkpoint's `processor_config.json` and `statistics.json`; use [`scripts/validate_hf_config_alignment.py`](scripts/validate_hf_config_alignment.py) to check the exact checkpoint metadata before running a new embodiment.
 
 The primary additions over upstream Isaac-GR00T live in [`open_h/`](open_h/README.md):
 
@@ -93,7 +95,7 @@ See [open_h/README.md](open_h/README.md) for a deeper dive on finetuning, multi-
   <img src="media/open-h-collage.jpg" width="800" alt="Open-H Dataset"/>
 </p>
 
-The [Open-H dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) comprises 16 healthcare robot embodiments across 34+ institutions, stored in [LeRobot](https://github.com/huggingface/lerobot) format. See [open_h/embodiments/README.md](open_h/embodiments/README.md) for the full embodiment comparison table.
+The [Open-H dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Robotics-Open-H-Embodiment) comprises 16 healthcare robot embodiments across 34+ institutions, stored in [LeRobot](https://github.com/huggingface/lerobot) format. See [open_h/embodiments/README.md](open_h/embodiments/README.md) for the full embodiment comparison table. That table is a dataset/config reference; a released model checkpoint may expose a smaller inference-ready set depending on its bundled processor and statistics metadata.
 
 ## Documentation
 
